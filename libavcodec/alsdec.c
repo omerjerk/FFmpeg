@@ -35,9 +35,11 @@
 #include "bgmc.h"
 #include "bswapdsp.h"
 #include "internal.h"
+#include "mlz.h"
 #include "libavutil/samplefmt.h"
 #include "libavutil/crc.h"
-
+#include "libavutil/softfloat_ieee754.h"
+#include "libavutil/intfloat.h"
 #include <stdint.h>
 
 /** Rice parameters and corresponding index offsets for decoding the
@@ -225,6 +227,15 @@ typedef struct ALSDecContext {
     int32_t **raw_samples;          ///< decoded raw samples for each channel
     int32_t *raw_buffer;            ///< contains all decoded raw samples including carryover samples
     uint8_t *crc_buffer;            ///< buffer of byte order corrected samples used for CRC check
+    //float data
+    MLZ* mlz;
+    SoftFloat_IEEE754 *acf;
+    int *last_acf_mantissa;
+    int *shift_value;
+    int *last_shift_value;
+    int **raw_mantissa;             ///< decoded mantissa bits of the difference signal
+    unsigned char *larray;
+    int *nbits;
 } ALSDecContext;
 
 
@@ -441,7 +452,6 @@ static int check_specific_config(ALSDecContext *ctx)
         }                                               \
     }
 
-    MISSING_ERR(sconf->floating,  "Floating point decoding",     AVERROR_PATCHWELCOME);
     MISSING_ERR(sconf->rlslms,    "Adaptive RLS-LMS prediction", AVERROR_PATCHWELCOME);
 
     return error;
@@ -1351,6 +1361,212 @@ static int revert_channel_correlation(ALSDecContext *ctx, ALSBlockData *bd,
 }
 
 
+static SoftFloat_IEEE754 multiply(SoftFloat_IEEE754 a, SoftFloat_IEEE754 b) {
+    uint64_t mantissa_temp;
+    uint64_t mask_64;
+    int bit_count;
+    int cutoff_bit_count;
+    unsigned char last_2_bits;
+    unsigned int mantissa;
+    uint32_t return_val = 0;
+    int32_t sign;
+
+    sign = a.sign ^ b.sign;
+
+    //Multiply mantissa bits in a 64-bit register
+    mantissa_temp = (uint64_t)a.mant * (uint64_t)b.mant;
+
+    // Count the valid bit count
+    for(bit_count=48, mask_64=(uint64_t)0x1 << 47; !(mantissa_temp & mask_64) && mask_64; bit_count--, mask_64>>=1);
+
+    // Round off
+    cutoff_bit_count = bit_count - 24;
+    if (cutoff_bit_count > 0) {
+        last_2_bits = (unsigned char)(((unsigned int)mantissa_temp >> (cutoff_bit_count - 1)) & 0x3 );
+        if ((last_2_bits == 0x3) || ((last_2_bits == 0x1) && ((unsigned int)mantissa_temp & ((0x1UL << (cutoff_bit_count - 1)) - 1)))) {
+            // Need to round up
+            mantissa_temp += (uint64_t)0x1 << cutoff_bit_count;
+        }
+    }
+
+    mantissa = (unsigned int)(mantissa_temp >> cutoff_bit_count);
+    // Need one more shift?
+    if (mantissa & 0x01000000ul) {
+        bit_count++;
+        mantissa >>= 1;
+    }
+
+    if (!sign) {
+        return_val = 0x80000000U;
+    }
+    return_val |= (a.exp + b.exp + bit_count - 47) << 23;
+    return_val |= mantissa;
+    return av_bits2sf_ieee754(return_val);
+}
+
+
+static int read_diff_float_data(ALSDecContext *ctx, unsigned int ra_frame) {
+    AVCodecContext *avctx = ctx->avctx;
+    GetBitContext *gb = &ctx->gb;
+    uint32_t tmp_32;
+    int use_acf;
+    SoftFloat_IEEE754 *acf = ctx->acf;
+    int *shift_value = ctx->shift_value;
+    int *last_shift_value = ctx->last_shift_value;
+    int *last_acf_mantissa = ctx->last_acf_mantissa;
+    int **raw_mantissa = ctx->raw_mantissa;
+    int *nbits = ctx->nbits;
+    unsigned char *larray = ctx->larray;
+    unsigned int partA_flag, highest_byte, shift_amp;
+    int frame_length = ctx->cur_frame_length;
+    int nchars;
+    int i, c;
+    long k, nbits_aligned;
+    unsigned long acc, j;
+    uint32_t sign, e, mantissa;
+    SoftFloat_IEEE754 scale = av_int2sf_ieee754(0x1u, 23);
+
+    get_bits_long(gb, 32); //num_bytes_diff_float
+
+    use_acf = get_bits1(gb);
+    if (ra_frame) {
+        for (c = 0; c < avctx->channels; ++c) {
+            last_acf_mantissa[c] = 0;
+            last_shift_value[c] = 0;
+        }
+        av_mlz_flush_dict(ctx->mlz);
+    }
+    for (c = 0; c < avctx->channels; ++c) {
+        if (use_acf) {
+            if (get_bits1(gb) /*acf_flag*/) {
+                tmp_32 = get_bits(gb, 23);
+                last_acf_mantissa[c] = tmp_32;
+            } else {
+                tmp_32 = last_acf_mantissa[c];
+            }
+            acf[c] = av_bits2sf_ieee754(tmp_32);
+        } else {
+            acf[c] = FLOAT_1;
+        }
+        highest_byte = get_bits(gb, 2);
+        shift_amp = get_bits1(gb);
+        partA_flag = get_bits1(gb);
+        if (shift_amp) {
+            shift_value[c] = get_bits(gb, 8);
+            last_shift_value[c] = shift_value[c];
+        } else {
+            shift_value[c] = last_shift_value[c];
+        }
+
+        if (partA_flag) {
+            if (!get_bits1(gb)/*compressed_flag*/) { //uncompressed
+                for (i = 0; i < frame_length; ++i) {
+                    if (ctx->raw_samples[c][i] == 0) {
+                        ctx->raw_mantissa[c][i] = get_bits_long(gb, 32);
+                    }
+                }
+            } else { //compressed
+                nchars = 0;
+                for (i = 0; i < frame_length; ++i) {
+                    if (ctx->raw_samples[c][i] == 0) {
+                        nchars += 4;
+                    }
+                }
+                tmp_32 = av_mlz_decompression(ctx->mlz, gb, nchars, larray);
+                if(tmp_32 != nchars) {
+                    av_log(ctx->avctx, AV_LOG_ERROR, "Error in MLZ decompression (%d, %d).\n", tmp_32, nchars);
+                    return AVERROR_INVALIDDATA;
+                }
+                for (i = 0; i < frame_length; ++i) {
+                    tmp_32 = (larray[i] << 24) | larray[i+1] << 16 | larray[i+2] << 8 | larray[i+3];
+                    ctx->raw_mantissa[c][i] = tmp_32;
+                }
+            }
+        }
+
+        //decode part B
+        if (highest_byte) {
+            for (i = 0; i < frame_length; ++i) {
+                if (ctx->raw_samples[c][i] != 0) {
+                    //The following logic is taken from Tabel 14.45 and 14.46 from the ISO spec
+                    if (av_cmp_sf_ieee754(acf[c], FLOAT_1)) {
+                        nbits[i] = 23 - av_log2(abs(ctx->raw_samples[c][i]));
+                    } else {
+                        nbits[i] = 23;
+                    }
+                    nbits[i] = FFMIN(nbits[i], highest_byte*8);
+                }
+            }
+            if (!get_bits1(gb)/*compressed_flag*/) { //uncompressed
+                for (i = 0; i < frame_length; ++i) {
+                    if (ctx->raw_samples[c][i] != 0) {
+                        raw_mantissa[c][i] = get_bits(gb, nbits[i]);
+                    }
+                }
+            } else { //compressed
+                nchars = 0;
+                for (i = 0; i < frame_length; ++i) {
+                    if (ctx->raw_samples[c][i]) {
+                        nchars += (int) nbits[i] / 8;
+                        if (nbits[i] % 8 > 0) {
+                            ++nchars;
+                        }
+                    }
+                }
+                tmp_32 = av_mlz_decompression(ctx->mlz, gb, nchars, larray);
+                if(tmp_32 != nchars) {
+                    av_log(ctx->avctx, AV_LOG_ERROR, "Error in MLZ decompression (%d, %d).\n", tmp_32, nchars);
+                    return AVERROR_INVALIDDATA;
+                }
+
+                j = 0;
+                for (i = 0; i < frame_length; ++i) {
+                    if (ctx->raw_samples[c][i]) {
+                        if ((nbits[i] % 8) > 0) {
+                            nbits_aligned = 8 * ((unsigned int)(nbits[i] / 8) + 1);
+                        } else {
+                            nbits_aligned = nbits[i];
+                        }
+                        acc = 0;
+                        for (k = 0; k < nbits_aligned/8; ++k) {
+                            acc = (acc << 8) + larray[j++];
+                        }
+                        acc >>= (nbits_aligned - nbits[i]);
+                        raw_mantissa[c][i] = acc;
+                    }
+                }
+            }
+        }
+
+        for (i = 0; i < frame_length; ++i) {
+            SoftFloat_IEEE754 pcm_sf = av_int2sf_ieee754(ctx->raw_samples[c][i], 0);
+            pcm_sf = av_div_sf_ieee754(pcm_sf, scale);
+            if (ctx->raw_samples[c][i] != 0) {
+                if (!av_cmp_sf_ieee754(acf[c], FLOAT_1)) {
+                    pcm_sf = multiply(acf[c], pcm_sf);
+                }
+
+                sign = pcm_sf.sign;
+                e = pcm_sf.exp;
+                mantissa = (pcm_sf.mant | 0x800000) + raw_mantissa[c][i];
+                while( mantissa >= 0x1000000 ) {
+                    e++;
+                    mantissa >>= 1;
+                }
+                if ( mantissa ) e += (shift_value[c] - 127);
+                mantissa &= 0x007fffffUL;
+                tmp_32 = (sign << 31) | ((e + EXP_BIAS) << 23) | (mantissa);
+                ctx->raw_samples[c][i] = tmp_32;
+            } else {
+                ctx->raw_samples[c][i] = raw_mantissa[c][i] & 0x007fffffUL;
+            }
+        }
+        align_get_bits(gb);
+    }
+    return 0;
+}
+
+
 /** Read the frame data.
  */
 static int read_frame_data(ALSDecContext *ctx, unsigned int ra_frame)
@@ -1492,7 +1708,9 @@ static int read_frame_data(ALSDecContext *ctx, unsigned int ra_frame)
                     sizeof(*ctx->raw_samples[c]) * sconf->max_order);
     }
 
-    // TODO: read_diff_float_data
+    if (sconf->floating) {
+        read_diff_float_data(ctx, ra_frame);
+    }
 
     if (get_bits_left(gb) < 0) {
         av_log(ctx->avctx, AV_LOG_ERROR, "Overread %d\n", -get_bits_left(gb));
@@ -1662,6 +1880,14 @@ static av_cold int decode_end(AVCodecContext *avctx)
     av_freep(&ctx->chan_data_buffer);
     av_freep(&ctx->reverted_channels);
     av_freep(&ctx->crc_buffer);
+    av_freep(&ctx->mlz);
+    av_freep(&ctx->acf);
+    av_freep(&ctx->last_acf_mantissa);
+    av_freep(&ctx->shift_value);
+    av_freep(&ctx->last_shift_value);
+    av_freep(&ctx->raw_mantissa);
+    av_freep(&ctx->larray);
+    av_freep(&ctx->nbits);
 
     return 0;
 }
@@ -1797,6 +2023,33 @@ static av_cold int decode_init(AVCodecContext *avctx)
     ctx->prev_raw_samples = av_malloc_array(sconf->max_order, sizeof(*ctx->prev_raw_samples));
     ctx->raw_buffer       = av_mallocz_array(avctx->channels * channel_size, sizeof(*ctx->raw_buffer));
     ctx->raw_samples      = av_malloc_array(avctx->channels, sizeof(*ctx->raw_samples));
+
+    if (sconf->floating) {
+        ctx->acf =  av_malloc_array(avctx->channels, sizeof(*ctx->acf));
+        ctx->shift_value = av_malloc_array(avctx->channels, sizeof(*ctx->shift_value));
+        ctx->last_shift_value = av_malloc_array(avctx->channels, sizeof(*ctx->last_shift_value));
+        ctx->last_acf_mantissa = av_malloc_array(avctx->channels, sizeof(*ctx->last_acf_mantissa));
+        ctx->raw_mantissa = av_malloc_array(avctx->channels, sizeof(*ctx->raw_mantissa));
+        for (int c = 0; c < avctx->channels; ++c) {
+            ctx->raw_mantissa[c] = av_malloc_array(ctx->cur_frame_length, sizeof(**ctx->raw_mantissa));
+            for (int i = 0; i < ctx->cur_frame_length; ++i) {
+                ctx->raw_mantissa[c][i] = 0x0u;
+            }
+        }
+        ctx->larray = av_malloc_array(ctx->cur_frame_length * 4, sizeof(*ctx->larray));
+        ctx->nbits = av_malloc_array(ctx->cur_frame_length, sizeof(*ctx->nbits));
+
+        ctx->mlz = av_malloc(sizeof(*ctx->mlz));
+        av_mlz_init_dict(ctx->mlz);
+        av_mlz_flush_dict(ctx->mlz);
+
+        if (!ctx->mlz || !ctx->acf || !ctx->shift_value || !ctx->last_shift_value
+            || !ctx->last_acf_mantissa || !ctx->raw_mantissa) {
+            av_log(avctx, AV_LOG_ERROR, "Allocating buffer memory failed.\n");
+            ret = AVERROR(ENOMEM);
+            goto fail;
+        }
+    }
 
     // allocate previous raw sample buffer
     if (!ctx->prev_raw_samples || !ctx->raw_buffer|| !ctx->raw_samples) {
