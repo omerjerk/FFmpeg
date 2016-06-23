@@ -33,7 +33,8 @@
 #define MAX_CODE            32767L
 #define TABLE_SIZE          35023L  // TABLE_SIZE must be a prime number
 
-
+/** Dictionary structure for mlz decompression
+ */
 typedef struct MLZDict {
     int  string_code;
     int  parent_code;
@@ -41,7 +42,8 @@ typedef struct MLZDict {
     int  match_len;
 } MLZDict;
 
-
+/** MLZ data strucure
+ */
 typedef struct MLZ {
 	int dic_code_bit;
     int current_dic_index_max;
@@ -52,8 +54,14 @@ typedef struct MLZ {
     MLZDict* dict;
 } MLZ;
 
+/** Initialize the dictionary
+ */
 void av_mlz_init_dict(MLZ *mlz);
+/** Flush the dictionary
+ */
 void av_mlz_flush_dict(MLZ *dict);
+/** Run mlz decompression on the next size bits and the output will be stored in buff
+ */
 int av_mlz_decompression(MLZ* mlz, GetBitContext* gb, int size, unsigned char *buff);
 
 #endif /*AVCODEC_MLZ_H*/

@@ -35,6 +35,9 @@ typedef struct SoftFloat_IEEE754 {
 static const SoftFloat_IEEE754 FLOAT_0 = {0, 0, -126};
 static const SoftFloat_IEEE754 FLOAT_1 = {0, 0,    0};
 
+/** Normalize the softfloat as defined by IEEE 754 single-recision floating
+ *  point specification
+ */
 static SoftFloat_IEEE754 av_normalize_sf_ieee754(SoftFloat_IEEE754 sf) {
     while( sf.mant >= 0x1000000UL ) {
         sf.exp++;
@@ -44,45 +47,62 @@ static SoftFloat_IEEE754 av_normalize_sf_ieee754(SoftFloat_IEEE754 sf) {
     return sf;
 }
 
+/** Convert integer to softfloat.
+ *  @return softfloat with value n * 2^e
+ */
 static SoftFloat_IEEE754 av_int2sf_ieee754(int64_t n, int e) {
     int sign = 0;
 
     if (n < 0) {
         sign = 1;
-        n *= -1;
+        n    *= -1;
     }
     return av_normalize_sf_ieee754((SoftFloat_IEEE754) {sign, n << MANT_BITS, 0 + e});
 }
 
+/** Make a softfloat out of the bitstream. Assumes the bits are in the form as defined
+ *  by the IEEE 754 spec.
+ */
 static SoftFloat_IEEE754 av_bits2sf_ieee754(uint32_t n) {
     return ((SoftFloat_IEEE754) { (n & 0x80000000UL), (n & 0x7F800000UL), (n & 0x7FFFFFUL) });
 }
 
+/** Convert the softfloat to integer
+ */
 static int av_sf2int_ieee754(SoftFloat_IEEE754 a) {
     if(a.exp >= 0) return a.mant <<  a.exp ;
     else           return a.mant >>(-a.exp);
 }
 
+/** Divide a by b. b should not be zero.
+ *  @return normalized result
+ */
 static SoftFloat_IEEE754 av_div_sf_ieee754(SoftFloat_IEEE754 a, SoftFloat_IEEE754 b) {
     int32_t mant, exp, sign;
-    a = av_normalize_sf_ieee754(a);
-    b = av_normalize_sf_ieee754(b);
+    a    = av_normalize_sf_ieee754(a);
+    b    = av_normalize_sf_ieee754(b);
     sign = a.sign ^ b.sign;
     mant = ((((uint64_t) (a.mant | 0x00800000UL)) << MANT_BITS) / (b.mant| 0x00800000UL));
-    exp = a.exp - b.exp;
+    exp  = a.exp - b.exp;
     return av_normalize_sf_ieee754((SoftFloat_IEEE754) {sign, mant, exp});
 }
 
+/** Multiply a with b
+ *  #return normalized result
+ */
 static SoftFloat_IEEE754 av_mul_sf_ieee754(SoftFloat_IEEE754 a, SoftFloat_IEEE754 b) {
     int32_t sign, mant, exp;
-    a = av_normalize_sf_ieee754(a);
-    b = av_normalize_sf_ieee754(b);
+    a    = av_normalize_sf_ieee754(a);
+    b    = av_normalize_sf_ieee754(b);
     sign = a.sign ^ b.sign;
     mant = (((uint64_t)(a.mant|0x00800000UL) * (uint64_t)(b.mant|0x00800000UL))>>MANT_BITS);
-    exp = a.exp + b.exp;
+    exp  = a.exp + b.exp;
     return av_normalize_sf_ieee754((SoftFloat_IEEE754) {sign, mant, exp});
 }
 
+/** Compare a with b strictly
+ *  @returns 1 if the a and b are equal, 0 otherwise.
+ */
 static int av_cmp_sf_ieee754(SoftFloat_IEEE754 a, SoftFloat_IEEE754 b) {
     a = av_normalize_sf_ieee754(a);
     b = av_normalize_sf_ieee754(b);

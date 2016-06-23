@@ -61,8 +61,8 @@ static int decode_string(MLZDict *dict, unsigned char *buff, int string_code, in
     unsigned long count, offset;
     int current_code, parent_code, tmp_code;
 
-    count = 0;
-    current_code = string_code;
+    count            = 0;
+    current_code     = string_code;
     *first_char_code = CODE_UNSET;
 
     while (count < bufsize) {
@@ -84,18 +84,18 @@ static int decode_string(MLZDict *dict, unsigned char *buff, int string_code, in
             }
             current_code = dict[current_code].parent_code;
             if ((current_code < 0) || (current_code > (DIC_INDEX_MAX - 1))) {
-                av_log(NULL, AV_LOG_ERROR, "Dic Index ERR!!!\n");
+                av_log(NULL, AV_LOG_ERROR, "Dic index error.\n");
                 return count;
             }
             if (current_code > FIRST_CODE) {
                 parent_code = dict[current_code].parent_code;
                 offset = (dict[current_code].match_len) - 1;
                 if (parent_code < 0 || parent_code > DIC_INDEX_MAX-1) {
-                    av_log(NULL, AV_LOG_ERROR, "Dic Index ERR!!!\n");
+                    av_log(NULL, AV_LOG_ERROR, "Dic index error.\n");
                     return count;
                 }
                 if (( offset > (DIC_INDEX_MAX - 1))) {
-                    av_log(NULL, AV_LOG_ERROR, "Dic offset ERR!!!\n");
+                    av_log(NULL, AV_LOG_ERROR, "Dic offset error.\n");
                     return count;
                 }
             }
@@ -129,7 +129,7 @@ int av_mlz_decompression(MLZ* mlz, GetBitContext* gb, int size, unsigned char *b
                 break;
             default:
                 if (string_code > mlz->current_dic_index_max) {
-                    av_log(NULL, AV_LOG_ERROR, "string code %d more than the max value.", string_code);
+                    av_log(NULL, AV_LOG_ERROR, "String code %d exceeds maximum value of %d.\n", string_code, mlz->current_dic_index_max);
                     return output_chars;
                 }
                 if (string_code == (int) mlz->bump_code) {
@@ -141,13 +141,13 @@ int av_mlz_decompression(MLZ* mlz, GetBitContext* gb, int size, unsigned char *b
                         output_chars += decode_string(dict, &buff[output_chars], last_string_code, &char_code, size - output_chars);
                         output_chars += decode_string(dict, &buff[output_chars], char_code, &char_code, size - output_chars);
                         set_new_entry_dict(dict, mlz->next_code, last_string_code, char_code);
-                        ++mlz->next_code;
+                        mlz->next_code++;
                     } else {
                         output_chars += decode_string(dict, &buff[output_chars], string_code, &char_code, size - output_chars);
-                        if ((output_chars <= size) && (mlz->freeze_flag == 0)) {
+                        if (output_chars <= size && !mlz->freeze_flag) {
                             if (last_string_code != -1) {
                                 set_new_entry_dict(dict, mlz->next_code, last_string_code, char_code);
-                                ++mlz->next_code;
+                                mlz->next_code++;
                             }
                         } else {
                             break;
