@@ -45,7 +45,7 @@ typedef struct MLZDict {
 /** MLZ data strucure
  */
 typedef struct MLZ {
-	int dic_code_bit;
+    int dic_code_bit;
     int current_dic_index_max;
     unsigned int bump_code;
     unsigned int flush_code;
