@@ -56,12 +56,12 @@ typedef struct MLZ {
 
 /** Initialize the dictionary
  */
-void av_mlz_init_dict(MLZ *mlz);
+void ff_mlz_init_dict(MLZ *mlz);
 /** Flush the dictionary
  */
-void av_mlz_flush_dict(MLZ *dict);
+void ff_mlz_flush_dict(MLZ *dict);
 /** Run mlz decompression on the next size bits and the output will be stored in buff
  */
-int av_mlz_decompression(MLZ* mlz, GetBitContext* gb, int size, unsigned char *buff);
+int ff_mlz_decompression(MLZ* mlz, GetBitContext* gb, int size, unsigned char *buff);
 
 #endif /*AVCODEC_MLZ_H*/

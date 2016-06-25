@@ -20,7 +20,7 @@
 
 #include "mlz.h"
 
-av_cold void av_mlz_init_dict(MLZ *mlz) {
+av_cold void ff_mlz_init_dict(MLZ *mlz) {
     mlz->dict = av_malloc_array(TABLE_SIZE, sizeof(*mlz->dict));
 
     mlz->flush_code            = FLUSH_CODE;
@@ -31,7 +31,7 @@ av_cold void av_mlz_init_dict(MLZ *mlz) {
     mlz->freeze_flag           = 0;
 }
 
-av_cold void av_mlz_flush_dict(MLZ *mlz) {
+av_cold void ff_mlz_flush_dict(MLZ *mlz) {
     MLZDict *dict = mlz->dict;
     int i;
     for ( i = 0; i < TABLE_SIZE; i++ ) {
@@ -105,7 +105,7 @@ static int decode_string(MLZDict *dict, unsigned char *buff, int string_code, in
     return count;
 }
 
-int av_mlz_decompression(MLZ* mlz, GetBitContext* gb, int size, unsigned char *buff) {
+int ff_mlz_decompression(MLZ* mlz, GetBitContext* gb, int size, unsigned char *buff) {
     MLZDict *dict = mlz->dict;
     unsigned long output_chars;
     int string_code, last_string_code, char_code;
@@ -120,7 +120,7 @@ int av_mlz_decompression(MLZ* mlz, GetBitContext* gb, int size, unsigned char *b
         switch (string_code) {
             case FLUSH_CODE:
             case MAX_CODE:
-                av_mlz_flush_dict(mlz);
+                ff_mlz_flush_dict(mlz);
                 char_code = -1;
                 last_string_code = -1;
                 break;

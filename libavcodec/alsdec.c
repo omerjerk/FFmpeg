@@ -1445,7 +1445,7 @@ static int read_diff_float_data(ALSDecContext *ctx, unsigned int ra_frame) {
             last_acf_mantissa[c] = 0;
             last_shift_value[c] = 0;
         }
-        av_mlz_flush_dict(ctx->mlz);
+        ff_mlz_flush_dict(ctx->mlz);
     }
 
     for (c = 0; c < avctx->channels; ++c) {
@@ -1490,7 +1490,7 @@ static int read_diff_float_data(ALSDecContext *ctx, unsigned int ra_frame) {
                     }
                 }
 
-                tmp_32 = av_mlz_decompression(ctx->mlz, gb, nchars, larray);
+                tmp_32 = ff_mlz_decompression(ctx->mlz, gb, nchars, larray);
                 if(tmp_32 != nchars) {
                     av_log(ctx->avctx, AV_LOG_ERROR, "Error in MLZ decompression (%d, %d).\n", tmp_32, nchars);
                     return AVERROR_INVALIDDATA;
@@ -1538,7 +1538,7 @@ static int read_diff_float_data(ALSDecContext *ctx, unsigned int ra_frame) {
                     }
                 }
 
-                tmp_32 = av_mlz_decompression(ctx->mlz, gb, nchars, larray);
+                tmp_32 = ff_mlz_decompression(ctx->mlz, gb, nchars, larray);
                 if(tmp_32 != nchars) {
                     av_log(ctx->avctx, AV_LOG_ERROR, "Error in MLZ decompression (%d, %d).\n", tmp_32, nchars);
                     return AVERROR_INVALIDDATA;
@@ -2069,8 +2069,8 @@ static av_cold int decode_init(AVCodecContext *avctx)
         ctx->nbits = av_malloc_array(ctx->cur_frame_length, sizeof(*ctx->nbits));
 
         ctx->mlz = av_malloc(sizeof(*ctx->mlz));
-        av_mlz_init_dict(ctx->mlz);
-        av_mlz_flush_dict(ctx->mlz);
+        ff_mlz_init_dict(ctx->mlz);
+        ff_mlz_flush_dict(ctx->mlz);
 
         if (!ctx->mlz || !ctx->acf || !ctx->shift_value || !ctx->last_shift_value
             || !ctx->last_acf_mantissa || !ctx->raw_mantissa) {
