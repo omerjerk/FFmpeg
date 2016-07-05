@@ -260,29 +260,29 @@ typedef struct ALSBlockData {
 
 static av_cold void dprint_specific_config(ALSDecContext *ctx)
 {
-#ifdef DEBUG
+// #ifdef DEBUG
     AVCodecContext *avctx    = ctx->avctx;
     ALSSpecificConfig *sconf = &ctx->sconf;
 
-    ff_dlog(avctx, "resolution = %i\n",           sconf->resolution);
-    ff_dlog(avctx, "floating = %i\n",             sconf->floating);
-    ff_dlog(avctx, "frame_length = %i\n",         sconf->frame_length);
-    ff_dlog(avctx, "ra_distance = %i\n",          sconf->ra_distance);
-    ff_dlog(avctx, "ra_flag = %i\n",              sconf->ra_flag);
-    ff_dlog(avctx, "adapt_order = %i\n",          sconf->adapt_order);
-    ff_dlog(avctx, "coef_table = %i\n",           sconf->coef_table);
-    ff_dlog(avctx, "long_term_prediction = %i\n", sconf->long_term_prediction);
-    ff_dlog(avctx, "max_order = %i\n",            sconf->max_order);
-    ff_dlog(avctx, "block_switching = %i\n",      sconf->block_switching);
-    ff_dlog(avctx, "bgmc = %i\n",                 sconf->bgmc);
-    ff_dlog(avctx, "sb_part = %i\n",              sconf->sb_part);
-    ff_dlog(avctx, "joint_stereo = %i\n",         sconf->joint_stereo);
-    ff_dlog(avctx, "mc_coding = %i\n",            sconf->mc_coding);
-    ff_dlog(avctx, "chan_config = %i\n",          sconf->chan_config);
-    ff_dlog(avctx, "chan_sort = %i\n",            sconf->chan_sort);
-    ff_dlog(avctx, "RLSLMS = %i\n",               sconf->rlslms);
-    ff_dlog(avctx, "chan_config_info = %i\n",     sconf->chan_config_info);
-#endif
+    av_log(avctx, AV_LOG_ERROR, "resolution = %i\n",           sconf->resolution);
+    av_log(avctx, AV_LOG_ERROR, "floating = %i\n",             sconf->floating);
+    av_log(avctx, AV_LOG_ERROR, "frame_length = %i\n",         sconf->frame_length);
+    av_log(avctx, AV_LOG_ERROR, "ra_distance = %i\n",          sconf->ra_distance);
+    av_log(avctx, AV_LOG_ERROR, "ra_flag = %i\n",              sconf->ra_flag);
+    av_log(avctx, AV_LOG_ERROR, "adapt_order = %i\n",          sconf->adapt_order);
+    av_log(avctx, AV_LOG_ERROR, "coef_table = %i\n",           sconf->coef_table);
+    av_log(avctx, AV_LOG_ERROR, "long_term_prediction = %i\n", sconf->long_term_prediction);
+    av_log(avctx, AV_LOG_ERROR, "max_order = %i\n",            sconf->max_order);
+    av_log(avctx, AV_LOG_ERROR, "block_switching = %i\n",      sconf->block_switching);
+    av_log(avctx, AV_LOG_ERROR, "bgmc = %i\n",                 sconf->bgmc);
+    av_log(avctx, AV_LOG_ERROR, "sb_part = %i\n",              sconf->sb_part);
+    av_log(avctx, AV_LOG_ERROR, "joint_stereo = %i\n",         sconf->joint_stereo);
+    av_log(avctx, AV_LOG_ERROR, "mc_coding = %i\n",            sconf->mc_coding);
+    av_log(avctx, AV_LOG_ERROR, "chan_config = %i\n",          sconf->chan_config);
+    av_log(avctx, AV_LOG_ERROR, "chan_sort = %i\n",            sconf->chan_sort);
+    av_log(avctx, AV_LOG_ERROR, "RLSLMS = %i\n",               sconf->rlslms);
+    av_log(avctx, AV_LOG_ERROR, "chan_config_info = %i\n",     sconf->chan_config_info);
+// #endif
 }
 
 
@@ -1451,6 +1451,7 @@ static int read_diff_float_data(ALSDecContext *ctx, unsigned int ra_frame) {
     for (c = 0; c < avctx->channels; ++c) {
         if (use_acf) {
             //acf_flag
+            av_log(avctx, AV_LOG_ERROR, "use_acf\n");
             if (get_bits1(gb)) {
                 tmp_32 = get_bits(gb, 23);
                 last_acf_mantissa[c] = tmp_32;
@@ -1460,7 +1461,9 @@ static int read_diff_float_data(ALSDecContext *ctx, unsigned int ra_frame) {
             acf[c] = av_bits2sf_ieee754(tmp_32);
         } else {
             acf[c] = FLOAT_1;
+            tmp_32 = 0x3f800000;
         }
+        av_log(avctx, AV_LOG_ERROR, "common multiplier = %f\n", av_int2float(tmp_32));
 
         highest_byte = get_bits(gb, 2);
         shift_amp = get_bits1(gb);
@@ -1569,7 +1572,7 @@ static int read_diff_float_data(ALSDecContext *ctx, unsigned int ra_frame) {
             pcm_sf = av_div_sf_ieee754(pcm_sf, scale);
 
             if (ctx->raw_samples[c][i] != 0) {
-                if (!av_cmp_sf_ieee754(acf[c], FLOAT_1)) {
+                if (!av_cmp_sf_ieee754(acf[c], FLOAT_1)) {                    
                     pcm_sf = multiply(acf[c], pcm_sf);
                 }
 
