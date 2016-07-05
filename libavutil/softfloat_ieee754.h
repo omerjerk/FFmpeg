@@ -64,7 +64,7 @@ static SoftFloat_IEEE754 av_int2sf_ieee754(int64_t n, int e) {
  *  by the IEEE 754 spec.
  */
 static SoftFloat_IEEE754 av_bits2sf_ieee754(uint32_t n) {
-    return ((SoftFloat_IEEE754) { (n & 0x80000000UL), (n & 0x7F800000UL), (n & 0x7FFFFFUL) });
+    return ((SoftFloat_IEEE754) { (n & 0x80000000UL), (n & 0x7FFFFFUL), (n & 0x7F800000UL) });
 }
 
 /** Convert the softfloat to integer
