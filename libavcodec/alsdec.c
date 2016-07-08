@@ -695,18 +695,21 @@ static int read_var_block_data(ALSDecContext *ctx, ALSBlockData *bd)
         if (sconf->adapt_order && sconf->max_order) {
             int opt_order_length = av_ceil_log2(av_clip((bd->block_length >> 3) - 1,
                                                 2, sconf->max_order + 1));
+
             *bd->opt_order       = get_bits(gb, opt_order_length);
+            av_log(avctx, AV_LOG_ERROR, "opt_order = %d length = %d\n", *bd->opt_order, opt_order_length);
             if (*bd->opt_order > sconf->max_order) {
-                *bd->opt_order = sconf->max_order;
-                av_log(avctx, AV_LOG_ERROR, "Predictor order too large.\n");
+                // *bd->opt_order = sconf->max_order;
+                av_log(avctx, AV_LOG_ERROR, "Predictor order too large1 %d > %d.\n", *bd->opt_order, sconf->max_order);
                 return AVERROR_INVALIDDATA;
             }
         } else {
             *bd->opt_order = sconf->max_order;
+
         }
         if (*bd->opt_order > bd->block_length) {
             *bd->opt_order = bd->block_length;
-            av_log(avctx, AV_LOG_ERROR, "Predictor order too large.\n");
+            av_log(avctx, AV_LOG_ERROR, "Predictor order too large2.\n");
             return AVERROR_INVALIDDATA;
         }
         opt_order = *bd->opt_order;
@@ -1006,6 +1009,7 @@ static int read_block(ALSDecContext *ctx, ALSBlockData *bd)
         ret = read_const_block_data(ctx, bd);
     }
 
+    // av_log(ctx->avctx, AV_LOG_ERROR, "mc_coding = %d js_switch = %d\n", sconf->mc_coding, ctx->js_switch);
     if (!sconf->mc_coding || ctx->js_switch)
         align_get_bits(gb);
 
@@ -1439,6 +1443,7 @@ static int read_diff_float_data(ALSDecContext *ctx, unsigned int ra_frame) {
 
     skip_bits_long(gb, 32); //num_bytes_diff_float
     use_acf = get_bits1(gb);
+    av_log(avctx, AV_LOG_ERROR, "use_acf = %d\n", use_acf);
 
     if (ra_frame) {
         for (c = 0; c < avctx->channels; ++c) {
@@ -1451,7 +1456,7 @@ static int read_diff_float_data(ALSDecContext *ctx, unsigned int ra_frame) {
     for (c = 0; c < avctx->channels; ++c) {
         if (use_acf) {
             //acf_flag
-            av_log(avctx, AV_LOG_ERROR, "use_acf\n");
+            // av_log(avctx, AV_LOG_ERROR, "use_acf\n");
             if (get_bits1(gb)) {
                 tmp_32 = get_bits(gb, 23);
                 last_acf_mantissa[c] = tmp_32;
@@ -1463,11 +1468,11 @@ static int read_diff_float_data(ALSDecContext *ctx, unsigned int ra_frame) {
             acf[c] = FLOAT_1;
             tmp_32 = 0x3f800000;
         }
-        av_log(avctx, AV_LOG_ERROR, "common multiplier = %f\n", av_int2float(tmp_32));
+        // av_log(avctx, AV_LOG_ERROR, "common multiplier = %f\n", av_int2float(tmp_32));
 
         highest_byte = get_bits(gb, 2);
-        shift_amp = get_bits1(gb);
         partA_flag = get_bits1(gb);
+        shift_amp = get_bits1(gb);
 
         if (shift_amp) {
             shift_value[c] = get_bits(gb, 8);
@@ -1485,7 +1490,9 @@ static int read_diff_float_data(ALSDecContext *ctx, unsigned int ra_frame) {
                     }
                 }
 
+                av_log(avctx, AV_LOG_ERROR, "partA uncompressed\n");
             } else { //compressed
+                av_log(avctx, AV_LOG_ERROR, "partA compressed\n");
                 nchars = 0;
                 for (i = 0; i < frame_length; ++i) {
                     if (ctx->raw_samples[c][i] == 0) {
@@ -1522,6 +1529,7 @@ static int read_diff_float_data(ALSDecContext *ctx, unsigned int ra_frame) {
             }
 
             if (!get_bits1(gb)) { //uncompressed
+                av_log(avctx, AV_LOG_ERROR, "partB uncompressed\n");
 
                 for (i = 0; i < frame_length; ++i) {
                     if (ctx->raw_samples[c][i] != 0) {
@@ -1530,6 +1538,7 @@ static int read_diff_float_data(ALSDecContext *ctx, unsigned int ra_frame) {
                 }
 
             } else { //compressed
+                av_log(avctx, AV_LOG_ERROR, "partB compressed\n");
 
                 nchars = 0;
                 for (i = 0; i < frame_length; ++i) {
@@ -1612,6 +1621,8 @@ static int read_frame_data(ALSDecContext *ctx, unsigned int ra_frame)
     uint32_t bs_info = 0;
     int ret;
 
+    ctx->js_switch = 0;
+
     // skip the size of the ra unit if present in the frame
     if (sconf->ra_flag == RA_FLAG_FRAMES && ra_frame)
         skip_bits_long(gb, 32);
@@ -1640,6 +1651,7 @@ static int read_frame_data(ALSDecContext *ctx, unsigned int ra_frame)
             if (c == avctx->channels - 1)
                 independent_bs = 1;
 
+            // av_log(avctx, AV_LOG_ERROR, "independent_bs = %d\n", independent_bs);
             if (independent_bs) {
                 ret = decode_blocks_ind(ctx, ra_frame, c,
                                         div_blocks, js_blocks);

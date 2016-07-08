@@ -84,18 +84,18 @@ static int decode_string(MLZDict *dict, unsigned char *buff, int string_code, in
             }
             current_code = dict[current_code].parent_code;
             if ((current_code < 0) || (current_code > (DIC_INDEX_MAX - 1))) {
-                av_log(NULL, AV_LOG_ERROR, "Dic index error.\n");
+                av_log(NULL, AV_LOG_ERROR, "MLZ dic index error.\n");
                 return count;
             }
             if (current_code > FIRST_CODE) {
                 parent_code = dict[current_code].parent_code;
                 offset = (dict[current_code].match_len) - 1;
                 if (parent_code < 0 || parent_code > DIC_INDEX_MAX-1) {
-                    av_log(NULL, AV_LOG_ERROR, "Dic index error.\n");
+                    av_log(NULL, AV_LOG_ERROR, "MLZ dic index error.\n");
                     return count;
                 }
                 if (( offset > (DIC_INDEX_MAX - 1))) {
-                    av_log(NULL, AV_LOG_ERROR, "Dic offset error.\n");
+                    av_log(NULL, AV_LOG_ERROR, "MLZ dic offset error.\n");
                     return count;
                 }
             }
