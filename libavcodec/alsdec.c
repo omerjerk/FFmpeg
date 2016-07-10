@@ -697,7 +697,6 @@ static int read_var_block_data(ALSDecContext *ctx, ALSBlockData *bd)
                                                 2, sconf->max_order + 1));
 
             *bd->opt_order       = get_bits(gb, opt_order_length);
-            av_log(avctx, AV_LOG_ERROR, "opt_order = %d length = %d\n", *bd->opt_order, opt_order_length);
             if (*bd->opt_order > sconf->max_order) {
                 // *bd->opt_order = sconf->max_order;
                 av_log(avctx, AV_LOG_ERROR, "Predictor order too large1 %d > %d.\n", *bd->opt_order, sconf->max_order);
@@ -1443,7 +1442,7 @@ static int read_diff_float_data(ALSDecContext *ctx, unsigned int ra_frame) {
 
     skip_bits_long(gb, 32); //num_bytes_diff_float
     use_acf = get_bits1(gb);
-    av_log(avctx, AV_LOG_ERROR, "use_acf = %d\n", use_acf);
+    // av_log(avctx, AV_LOG_ERROR, "use_acf = %d\n", use_acf);
 
     if (ra_frame) {
         for (c = 0; c < avctx->channels; ++c) {
@@ -1490,9 +1489,8 @@ static int read_diff_float_data(ALSDecContext *ctx, unsigned int ra_frame) {
                     }
                 }
 
-                av_log(avctx, AV_LOG_ERROR, "partA uncompressed\n");
+                av_log(avctx, AV_LOG_ERROR, "%d partA uncompressed\n", ++derp);
             } else { //compressed
-                av_log(avctx, AV_LOG_ERROR, "partA compressed\n");
                 nchars = 0;
                 for (i = 0; i < frame_length; ++i) {
                     if (ctx->raw_samples[c][i] == 0) {
@@ -1500,6 +1498,7 @@ static int read_diff_float_data(ALSDecContext *ctx, unsigned int ra_frame) {
                     }
                 }
 
+                av_log(avctx, AV_LOG_ERROR, "%d partA compressed %d\n", ++derp, nchars);
                 tmp_32 = ff_mlz_decompression(ctx->mlz, gb, nchars, larray);
                 if(tmp_32 != nchars) {
                     av_log(ctx->avctx, AV_LOG_ERROR, "Error in MLZ decompression (%d, %d).\n", tmp_32, nchars);
@@ -1529,7 +1528,7 @@ static int read_diff_float_data(ALSDecContext *ctx, unsigned int ra_frame) {
             }
 
             if (!get_bits1(gb)) { //uncompressed
-                av_log(avctx, AV_LOG_ERROR, "partB uncompressed\n");
+                av_log(avctx, AV_LOG_ERROR, "%d partB uncompressed\n", ++derp);
 
                 for (i = 0; i < frame_length; ++i) {
                     if (ctx->raw_samples[c][i] != 0) {
@@ -1538,7 +1537,7 @@ static int read_diff_float_data(ALSDecContext *ctx, unsigned int ra_frame) {
                 }
 
             } else { //compressed
-                av_log(avctx, AV_LOG_ERROR, "partB compressed\n");
+                av_log(avctx, AV_LOG_ERROR, "%d partB compressed\n", ++derp);
 
                 nchars = 0;
                 for (i = 0; i < frame_length; ++i) {
@@ -1943,6 +1942,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
 {
     unsigned int c;
     unsigned int channel_size;
+    unsigned int i;
     int num_buffers, ret;
     ALSDecContext *ctx = avctx->priv_data;
     ALSSpecificConfig *sconf = &ctx->sconf;
@@ -2074,9 +2074,9 @@ static av_cold int decode_init(AVCodecContext *avctx)
         ctx->last_shift_value = av_malloc_array(avctx->channels, sizeof(*ctx->last_shift_value));
         ctx->last_acf_mantissa = av_malloc_array(avctx->channels, sizeof(*ctx->last_acf_mantissa));
         ctx->raw_mantissa = av_malloc_array(avctx->channels, sizeof(*ctx->raw_mantissa));
-        for (int c = 0; c < avctx->channels; ++c) {
+        for (c = 0; c < avctx->channels; ++c) {
             ctx->raw_mantissa[c] = av_malloc_array(ctx->cur_frame_length, sizeof(**ctx->raw_mantissa));
-            for (int i = 0; i < ctx->cur_frame_length; ++i) {
+            for (i = 0; i < ctx->cur_frame_length; ++i) {
                 ctx->raw_mantissa[c][i] = 0x0u;
             }
         }
