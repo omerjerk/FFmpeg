@@ -105,6 +105,15 @@ static int decode_string(MLZDict *dict, unsigned char *buff, int string_code, in
     return count;
 }
 
+static int input_code(GetBitContext* gb, int len) {
+    int tmp_code = 0;
+    int i;
+    for (i = 0; i < len; ++i) {
+        tmp_code += get_bits1(gb) << i;
+    }
+    return tmp_code;
+}
+
 int ff_mlz_decompression(MLZ* mlz, GetBitContext* gb, int size, unsigned char *buff) {
     MLZDict *dict = mlz->dict;
     unsigned long output_chars;
@@ -116,7 +125,7 @@ int ff_mlz_decompression(MLZ* mlz, GetBitContext* gb, int size, unsigned char *b
     output_chars = 0;
 
     while (output_chars < size) {
-        string_code = get_bits(gb, mlz->dic_code_bit);
+        string_code = input_code(gb, mlz->dic_code_bit);
         switch (string_code) {
             case FLUSH_CODE:
             case MAX_CODE:
