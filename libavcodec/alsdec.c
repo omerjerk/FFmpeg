@@ -1489,7 +1489,6 @@ static int read_diff_float_data(ALSDecContext *ctx, unsigned int ra_frame) {
                     }
                 }
 
-                av_log(avctx, AV_LOG_ERROR, "%d partA uncompressed\n", ++derp);
             } else { //compressed
                 nchars = 0;
                 for (i = 0; i < frame_length; ++i) {
@@ -1498,7 +1497,6 @@ static int read_diff_float_data(ALSDecContext *ctx, unsigned int ra_frame) {
                     }
                 }
 
-                av_log(avctx, AV_LOG_ERROR, "%d partA compressed %d\n", ++derp, nchars);
                 tmp_32 = ff_mlz_decompression(ctx->mlz, gb, nchars, larray);
                 if(tmp_32 != nchars) {
                     av_log(ctx->avctx, AV_LOG_ERROR, "Error in MLZ decompression (%d, %d).\n", tmp_32, nchars);
@@ -1528,7 +1526,6 @@ static int read_diff_float_data(ALSDecContext *ctx, unsigned int ra_frame) {
             }
 
             if (!get_bits1(gb)) { //uncompressed
-                av_log(avctx, AV_LOG_ERROR, "%d partB uncompressed\n", ++derp);
 
                 for (i = 0; i < frame_length; ++i) {
                     if (ctx->raw_samples[c][i] != 0) {
@@ -1537,7 +1534,6 @@ static int read_diff_float_data(ALSDecContext *ctx, unsigned int ra_frame) {
                 }
 
             } else { //compressed
-                av_log(avctx, AV_LOG_ERROR, "%d partB compressed\n", ++derp);
 
                 nchars = 0;
                 for (i = 0; i < frame_length; ++i) {
