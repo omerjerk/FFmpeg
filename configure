@@ -1656,6 +1656,7 @@ CONFIG_LIST="
     thumb
     valgrind_backtrace
     xmm_clobber_test
+    window
 "
 
 THREADS_LIST="
@@ -2293,6 +2294,7 @@ faanidct_deps="faan idctdsp"
 h264dsp_select="startcode"
 frame_thread_encoder_deps="encoders threads"
 intrax8_select="blockdsp idctdsp"
+lpc_select="window"
 mdct_select="fft"
 me_cmp_select="fdctdsp idctdsp pixblockdsp"
 mpeg_er_select="error_resilience"

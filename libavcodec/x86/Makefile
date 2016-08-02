@@ -77,6 +77,9 @@ OBJS-$(CONFIG_WEBP_DECODER)            += x86/vp8dsp_init.o
 MMX-OBJS-$(CONFIG_FDCTDSP)             += x86/fdct.o
 MMX-OBJS-$(CONFIG_IDCTDSP)             += x86/simple_idct.o
 MMX-OBJS-$(CONFIG_VC1DSP)              += x86/vc1dsp_mmx.o
+MMX-OBJS-WINDOW-$(HAVE_SSE)            += x86/window_sse2.o
+MMX-OBJS-$(CONFIG_WINDOW)              += x86/window.o                 \
+                                          $(MMX-OBJS-WINDOW-yes)
 
 # decoders/encoders
 MMX-OBJS-$(CONFIG_SNOW_DECODER)        += x86/snowdsp.o

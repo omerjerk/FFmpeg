@@ -1,6 +1,6 @@
 /*
  * Block Gilbert-Moore decoder
- * Copyright (c) 2010 Thilo Borgmann <thilo.borgmann _at_ mail.de>
+ * Copyright (c) 2010 Thilo Borgmann <thilo.borgmann _at_ googlemail.com>
  *
  * This file is part of FFmpeg.
  *
@@ -22,11 +22,12 @@
 /**
  * @file
  * Block Gilbert-Moore decoder as used by MPEG-4 ALS
- * @author Thilo Borgmann <thilo.borgmann _at_ mail.de>
+ * @author Thilo Borgmann <thilo.borgmann _at_ googlemail.com>
  */
 
-#include "libavutil/attributes.h"
+
 #include "bgmc.h"
+
 
 #define FREQ_BITS  14                      // bits used by frequency counters
 #define VALUE_BITS 18                      // bits used to represent the values
@@ -40,7 +41,17 @@
 #define LUT_BUFF   4                       // number of buffered lookup tables
 
 
-/** Cumulative frequency tables for block Gilbert-Moore coding. */
+/** Predefined maximum values
+ */
+int ff_bgmc_max[16] = {
+    127, 127, 127,
+    191, 191, 191, 191, 191, 191, 191, 191,
+    255, 255, 255, 255, 255
+};
+
+
+/** Cumulative frequency tables for block Gilbert-Moore coding.
+ */
 static const uint16_t cf_tables_1[3][129] = {
     {
         16384, 16066, 15748, 15431, 15114, 14799, 14485, 14173, 13861, 13552,
@@ -422,8 +433,32 @@ static const uint16_t *const cf_table[16] = {
 };
 
 
-/** Initialize a given lookup table using a given delta */
-static void bgmc_lut_fillp(uint8_t *lut, int *lut_status, int delta)
+/** Tail codes used for arithmetic coding in ALS.
+ */
+const uint8_t ff_bgmc_tail_code[16][6] = {
+    { 74, 44, 25, 13,  7, 3},
+    { 68, 42, 24, 13,  7, 3},
+    { 58, 39, 23, 13,  7, 3},
+    {126, 70, 37, 19, 10, 5},
+    {132, 70, 37, 20, 10, 5},
+    {124, 70, 38, 20, 10, 5},
+    {120, 69, 37, 20, 11, 5},
+    {116, 67, 37, 20, 11, 5},
+    {108, 66, 36, 20, 10, 5},
+    {102, 62, 36, 20, 10, 5},
+    { 88, 58, 34, 19, 10, 5},
+    {162, 89, 49, 25, 13, 7},
+    {156, 87, 49, 26, 14, 7},
+    {150, 86, 47, 26, 14, 7},
+    {142, 84, 47, 26, 14, 7},
+    {131, 79, 46, 26, 14, 7}
+};
+
+
+/** Initialize a given lookup table using a given delta
+ */
+static void bgmc_lut_fillp(uint8_t *lut, unsigned int *lut_status,
+                           unsigned int delta)
 {
     unsigned int sx, i;
 
@@ -442,8 +477,10 @@ static void bgmc_lut_fillp(uint8_t *lut, int *lut_status, int delta)
 }
 
 
-/** Retune the index of a suitable lookup table for a given delta */
-static uint8_t *bgmc_lut_getp(uint8_t *lut, int *lut_status, int delta)
+/** Retune the index of a suitable lookup table for a given delta
+ */
+static uint8_t* bgmc_lut_getp(uint8_t *lut, unsigned int *lut_status,
+                              unsigned int delta)
 {
     unsigned int i = av_clip(delta, 0, LUT_BUFF - 1);
 
@@ -456,27 +493,25 @@ static uint8_t *bgmc_lut_getp(uint8_t *lut, int *lut_status, int delta)
 }
 
 
-/** Initialize the lookup table arrays */
-av_cold int ff_bgmc_init(AVCodecContext *avctx,
-                         uint8_t **cf_lut, int **cf_lut_status)
+/** Initialize the lookup table arrays
+ */
+av_cold int ff_bgmc_init(AVCodecContext *avctx, uint8_t **cf_lut, int **cf_lut_status)
 {
-    *cf_lut        = av_malloc(sizeof(**cf_lut)        * LUT_BUFF * 16 * LUT_SIZE);
-    *cf_lut_status = av_malloc(sizeof(**cf_lut_status) * LUT_BUFF);
+    *cf_lut        = av_malloc(sizeof(*cf_lut       ) * LUT_BUFF * 16 * LUT_SIZE);
+    *cf_lut_status = av_malloc(sizeof(*cf_lut_status) * LUT_BUFF);
 
-    if (!*cf_lut || !*cf_lut_status) {
+    if (!cf_lut || !cf_lut_status) {
         ff_bgmc_end(cf_lut, cf_lut_status);
         av_log(avctx, AV_LOG_ERROR, "Allocating buffer memory failed.\n");
         return AVERROR(ENOMEM);
-    } else {
-        // initialize lut_status buffer to a value never used to compare against
-        memset(*cf_lut_status, -1, sizeof(**cf_lut_status) * LUT_BUFF);
     }
 
     return 0;
 }
 
 
-/** Release the lookup table arrays */
+/** Release the lookup table arrays
+ */
 av_cold void ff_bgmc_end(uint8_t **cf_lut, int **cf_lut_status)
 {
     av_freep(cf_lut);
@@ -484,9 +519,10 @@ av_cold void ff_bgmc_end(uint8_t **cf_lut, int **cf_lut_status)
 }
 
 
-/** Initialize decoding and reads the first value */
-void ff_bgmc_decode_init(GetBitContext *gb, unsigned int *h,
-                         unsigned int *l, unsigned int *v)
+/** Initialize decoding and reads the first value
+ */
+void ff_bgmc_decode_init(GetBitContext *gb,
+                      unsigned int *h, int *l, int *v)
 {
     *h = TOP_VALUE;
     *l = 0;
@@ -503,9 +539,9 @@ void ff_bgmc_decode_end(GetBitContext *gb)
 
 /** Read and decode a block Gilbert-Moore coded symbol */
 void ff_bgmc_decode(GetBitContext *gb, unsigned int num, int32_t *dst,
-                    int delta, unsigned int sx,
+                    unsigned int delta, unsigned int sx,
                     unsigned int *h, unsigned int *l, unsigned int *v,
-                    uint8_t *cf_lut, int *cf_lut_status)
+                    uint8_t *cf_lut, unsigned int *cf_lut_status)
 {
     unsigned int i;
     uint8_t *lut = bgmc_lut_getp(cf_lut, cf_lut_status, delta);
@@ -558,3 +594,137 @@ void ff_bgmc_decode(GetBitContext *gb, unsigned int num, int32_t *dst,
     *l = low;
     *v = value;
 }
+
+
+/** Initialize encoding.
+ */
+void ff_bgmc_encode_init(unsigned int *h, unsigned int *l, unsigned int *f)
+{
+    *h = TOP_VALUE;
+    *l = 0;
+    *f = 0;
+}
+
+
+/** Write bit and a given number of opposite follow bits.
+ */
+av_always_inline
+static int put_bits_follow(PutBitContext *pb, unsigned int bit, unsigned int *follow)
+{
+    int count = *follow + 1;
+
+    if (pb) {
+        if (put_bits_count(pb) + count > pb->size_in_bits)
+            return -1;
+
+        if (!*follow) {
+            put_bits(pb, 1, bit);
+        } else if (*follow < 31) {
+            put_bits(pb, 1 + *follow, (1 << *follow) - !bit);
+        } else {
+            put_bits (pb, 1, bit);
+            for (unsigned int i = 0; i < *follow; i++)
+                put_bits(pb, 1, !bit);
+        }
+    }
+
+    *follow = 0;
+
+    return count;
+}
+
+
+/** Finish encoding.
+ */
+int ff_bgmc_encode_end(PutBitContext *pb, unsigned int *l, unsigned int *f)
+{
+    *f += 1;
+    return put_bits_follow(pb, *l >= FIRST_QTR, f);
+}
+
+
+/** Encode and write the MSB part of a single symbol.
+ */
+av_always_inline
+int ff_bgmc_encode(PutBitContext *pb, int32_t symbol,
+                    unsigned int delta, unsigned int sx,
+                    unsigned int *h, unsigned int *l, unsigned int *f)
+{
+    int count = 0;
+
+    // read current state
+    unsigned int high   = *h;
+    unsigned int low    = *l;
+    unsigned int range  = high - low + 1;
+
+    high = low + ((range * cf_table[sx][(symbol    ) << delta] - (1 << FREQ_BITS)) >> FREQ_BITS);
+    low  = low + ((range * cf_table[sx][(symbol + 1) << delta]                   ) >> FREQ_BITS);
+
+    while (1) {
+        if (high >= HALF) {
+            if        (low >= HALF) {
+                int c  = put_bits_follow(pb, 1, f);
+                if (c < 0)
+                    return -1;
+                count += c;
+                low   -= HALF;
+                high  -= HALF;
+            } else if (low >= FIRST_QTR && high < THIRD_QTR) {
+                *f    += 1;
+                low   -= FIRST_QTR;
+                high  -= FIRST_QTR;
+            } else break;
+        } else {
+            int c = put_bits_follow(pb, 0, f);
+            if (c < 0)
+                return -1;
+            count += c;
+        }
+        low   *= 2;
+        high   = 2 * high  + 1;
+    }
+
+    // save current state
+    *h = high;
+    *l = low;
+
+    return count;
+}
+
+
+/** Encode and write the MSB part of a given symbol array of length 'n'.
+ */
+int ff_bgmc_encode_msb(PutBitContext *pb, const int32_t *symbols, unsigned int n,
+                        unsigned int k, unsigned int delta, unsigned int max,
+                        unsigned int s, unsigned int sx,
+                        unsigned int *h, unsigned int *l, unsigned int *f)
+{
+    int tail  = ff_bgmc_tail_code[sx][delta];
+    int count = 0;
+
+    for (; n > 0; n--) {
+        int32_t res = *symbols;
+        int c;
+
+        res >>= k;
+        res <<= 1;
+
+        if (res < 0)
+            res = -res - 1;
+
+        if      (res >= max)
+            res = tail;
+        else if (res >= tail)
+            res++;
+
+        c = ff_bgmc_encode(pb, res, delta, sx, h, l, f);
+        if (c < 0)
+            return -1;
+        count += c;
+
+        symbols++;
+    }
+
+    return count;
+}
+

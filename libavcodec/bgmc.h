@@ -1,6 +1,6 @@
 /*
  * Block Gilbert-Moore decoder
- * Copyright (c) 2010 Thilo Borgmann <thilo.borgmann _at_ mail.de>
+ * Copyright (c) 2010 Thilo Borgmann <thilo.borgmann _at_ googlemail.com>
  *
  * This file is part of FFmpeg.
  *
@@ -22,7 +22,7 @@
 /**
  * @file
  * Block Gilbert-Moore decoder header
- * @author Thilo Borgmann <thilo.borgmann _at_ mail.de>
+ * @author Thilo Borgmann <thilo.borgmann _at_ googlemail.com>
  */
 
 
@@ -32,8 +32,13 @@
 
 #include "avcodec.h"
 #include "get_bits.h"
+#include "put_bits.h"
+
+extern int ff_bgmc_max[16];
+extern const uint8_t ff_bgmc_tail_code[16][6];
 
 
+/* arithmetic decoding of MSB and LSB parts */
 int ff_bgmc_init(AVCodecContext *avctx, uint8_t **cf_lut, int **cf_lut_status);
 
 
@@ -41,16 +46,34 @@ void ff_bgmc_end(uint8_t **cf_lut, int **cf_lut_status);
 
 
 void ff_bgmc_decode_init(GetBitContext *gb,
-                      unsigned int *h, unsigned int *l, unsigned int *v);
+                         unsigned int *h, int *l, int *v);
 
 
 void ff_bgmc_decode_end(GetBitContext *gb);
 
 
 void ff_bgmc_decode(GetBitContext *gb, unsigned int num, int32_t *dst,
-                 int delta, unsigned int sx,
-                 unsigned int *h, unsigned int *l, unsigned int *v,
-                 uint8_t *cf_lut, int *cf_lut_status);
+                    unsigned int delta, unsigned int sx,
+                    unsigned int *h, unsigned int *l, unsigned int *v,
+                    uint8_t *cf_lut, unsigned int *cf_lut_status);
+
+
+/* arithmetic encoding of MSB parts */
+void ff_bgmc_encode_init(unsigned int *h, unsigned int *l, unsigned int *f);
+
+
+int ff_bgmc_encode_msb(PutBitContext *pb, const int32_t *symbols, unsigned int n,
+                       unsigned int k, unsigned int delta, unsigned int max,
+                       unsigned int s, unsigned int sx,
+                       unsigned int *h, unsigned int *l, unsigned int *f);
+
+
+int ff_bgmc_encode(PutBitContext *pb, int32_t symbol,
+                   unsigned int delta, unsigned int sx,
+                   unsigned int *h, unsigned int *l, unsigned int *f);
+
+
+int ff_bgmc_encode_end(PutBitContext *pb, unsigned int *l, unsigned int *f);
 
 
 #endif /* AVCODEC_BGMC_H */

@@ -386,7 +386,7 @@ void avcodec_register_all(void)
     REGISTER_ENCDEC (AC3,               ac3);
     REGISTER_ENCDEC (AC3_FIXED,         ac3_fixed);
     REGISTER_ENCDEC (ALAC,              alac);
-    REGISTER_DECODER(ALS,               als);
+    REGISTER_ENCDEC (ALS,               als);
     REGISTER_DECODER(AMRNB,             amrnb);
     REGISTER_DECODER(AMRWB,             amrwb);
     REGISTER_DECODER(APE,               ape);
