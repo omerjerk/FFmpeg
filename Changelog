@@ -7,6 +7,7 @@ version <next>:
 - Changed metadata print option to accept general urls
 - Alias muxer for Ogg Video (.ogv)
 - VP8 in Ogg muxing
+- decode floating point sample data in als decoder
 - masked lz decompression
 - IEEE 754 single floating point soft float implementation
 
