@@ -1,0 +1,16 @@
+***************
+*** 1656,1661 ****
+      thumb
+      valgrind_backtrace
+      xmm_clobber_test
+  "
+  
+  THREADS_LIST="
+--- 1656,1662 ----
+      thumb
+      valgrind_backtrace
+      xmm_clobber_test
++     window
+  "
+  
+  THREADS_LIST="
