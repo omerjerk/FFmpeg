@@ -2800,9 +2800,15 @@ static int write_specific_config(AVCodecContext *avctx)
     if (sconf->ra_flag == RA_FLAG_HEADER && sconf->ra_distance > 0)     // ra_unit_size
         header_size += (sconf->samples / sconf->frame_length + 1) << 2;
 
+/*
     if (avctx->extradata)
-        av_freep(&avctx->extradata);
+        av_freep(&avctx->extradata);	
 
+    avctx->extradata = av_mallocz(header_size + AV_INPUT_BUFFER_PADDING_SIZE);
+    if (!avctx->extradata)
+        return AVERROR(ENOMEM);
+*/
+    if (!avctx->extradata)
     avctx->extradata = av_mallocz(header_size + AV_INPUT_BUFFER_PADDING_SIZE);
     if (!avctx->extradata)
         return AVERROR(ENOMEM);
@@ -2833,7 +2839,6 @@ static int write_specific_config(AVCodecContext *avctx)
 
     put_bits32(&ctx->pb,     MKBETAG('A', 'L', 'S', '\0'));
     put_bits32(&ctx->pb,     avctx->sample_rate);
-    av_log(NULL,NULL,"%lu\n",ctx->pb.buf_ptr);
     put_bits32(&ctx->pb,     sconf->samples);
     put_bits  (&ctx->pb, 16, avctx->channels - 1);
     put_bits  (&ctx->pb,  3, 1);                      // original file_type (0 = unknown, 1 = wav, ...)
