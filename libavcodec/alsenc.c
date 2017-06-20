@@ -2833,6 +2833,7 @@ static int write_specific_config(AVCodecContext *avctx)
 
     put_bits32(&ctx->pb,     MKBETAG('A', 'L', 'S', '\0'));
     put_bits32(&ctx->pb,     avctx->sample_rate);
+    av_log(NULL,NULL,"%lu\n",ctx->pb.buf_ptr);
     put_bits32(&ctx->pb,     sconf->samples);
     put_bits  (&ctx->pb, 16, avctx->channels - 1);
     put_bits  (&ctx->pb,  3, 1);                      // original file_type (0 = unknown, 1 = wav, ...)
