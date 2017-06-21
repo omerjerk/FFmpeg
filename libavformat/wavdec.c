@@ -582,7 +582,7 @@ break_loop:
 
     set_spdif(s, wav);
 
-	av_log(NULL, NULL, "%ld\t\n",size/st->codecpar->block_align );
+
     return 0;
 }
 

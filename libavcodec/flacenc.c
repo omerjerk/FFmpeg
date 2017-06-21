@@ -148,8 +148,10 @@ static void write_streaminfo(FlacEncodeContext *s, uint8_t *header)
     put_bits(&pb, 3, s->channels-1);
     put_bits(&pb,  5, s->avctx->bits_per_raw_sample - 1);
     /* write 36-bit sample count in 2 put_bits() calls */
+	av_log(NULL,NULL,"%x\n",s->sample_count);
     put_bits(&pb, 24, (s->sample_count & 0xFFFFFF000LL) >> 12);
     put_bits(&pb, 12,  s->sample_count & 0x000000FFFLL);
+    s->sample_count++;
     flush_put_bits(&pb);
     memcpy(&header[18], s->md5sum, 16);
 }
