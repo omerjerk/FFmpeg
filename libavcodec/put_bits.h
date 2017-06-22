@@ -194,6 +194,7 @@ static inline void put_bits(PutBitContext *s, int n, unsigned int value)
         bit_buf   <<= bit_left;
         bit_buf    |= value >> (n - bit_left);
         if (3 < s->buf_end - s->buf_ptr) {
+        av_log(NULL,NULL,"|%lu\t%x|",s->buf_ptr, bit_buf);
             AV_WB32(s->buf_ptr, bit_buf);
             s->buf_ptr += 4;
         } else {
