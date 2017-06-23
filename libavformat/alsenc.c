@@ -25,9 +25,11 @@
 
 typedef struct AlsEncContext {
     int header_size;
+    int extradata_size;
+    uint8_t *side_data;
 } AlsEncContext;
 
-static int als_write_header(struct AVFormatContext *s)
+static int als_write_header(struct AVFormatContext *s, uint8_t *side_data)
 {
     MPEG4AudioConfig m4ac;
     AVCodecParameters *par = s->streams[0]->codecpar;
@@ -44,6 +46,7 @@ static int als_write_header(struct AVFormatContext *s)
     ctx->header_size = par->extradata_size - config_offset;
 
     /* write STREAMINFO or full header */
+    memcpy(par->extradata, side_data, ctx->extradata_size);   
     avio_write(s->pb, &par->extradata[config_offset], ctx->header_size);
 
     return 0;
@@ -53,6 +56,8 @@ static int als_write_trailer(struct AVFormatContext *s)
 {
     AVIOContext *pb = s->pb;
     AlsEncContext *ctx = s->priv_data;
+    uint8_t *side_data = ctx->side_data ? ctx->side_data :
+                                          s->streams[0]->codecpar->extradata;
 
     if (pb->seekable) {
         /* rewrite the header */
@@ -60,7 +65,7 @@ static int als_write_trailer(struct AVFormatContext *s)
         int     header_size = ctx->header_size;
 
         avio_seek(pb, 0, SEEK_SET);
-        if (als_write_header(s))
+        if (als_write_header(s, side_data)) 
             return -1;
 
         if (header_size != ctx->header_size) {
@@ -72,13 +77,27 @@ static int als_write_trailer(struct AVFormatContext *s)
         av_log(s, AV_LOG_WARNING, "unable to rewrite ALS header.\n");
     }
 
+    av_freep(&ctx->side_data);
     return 0;
 }
 
 static int als_write_packet(struct AVFormatContext *s, AVPacket *pkt)
 {
-    avio_write(s->pb, pkt->data, pkt->size);
-    avio_flush(s->pb);
+    AlsEncContext *ctx = s->priv_data;
+    int extradata_size;
+    uint8_t *side_data = av_packet_get_side_data(pkt, AV_PKT_DATA_NEW_EXTRADATA,
+                                         &extradata_size);
+    if (side_data) {
+        av_freep(&ctx->side_data);
+        ctx->side_data = av_malloc(extradata_size);
+        if (!ctx->side_data)
+            return AVERROR(ENOMEM);
+        memcpy(ctx->side_data, side_data, extradata_size);   
+        ctx->extradata_size=extradata_size;
+    }          
+    if(pkt->size)
+        avio_write(s->pb, pkt->data, pkt->size);
+    //avio_flush(s->pb);
     return 0;
 }
 
