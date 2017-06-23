@@ -46,7 +46,7 @@ static int als_write_header(struct AVFormatContext *s, uint8_t *side_data)
     ctx->header_size = par->extradata_size - config_offset;
 
     /* write STREAMINFO or full header */
-    memcpy(par->extradata, side_data, ctx->extradata_size);   
+    memcpy(par->extradata, side_data, ctx->extradata_size);
     avio_write(s->pb, &par->extradata[config_offset], ctx->header_size);
 
     return 0;
@@ -65,7 +65,7 @@ static int als_write_trailer(struct AVFormatContext *s)
         int     header_size = ctx->header_size;
 
         avio_seek(pb, 0, SEEK_SET);
-        if (als_write_header(s, side_data)) 
+        if (als_write_header(s, side_data))
             return -1;
 
         if (header_size != ctx->header_size) {
@@ -92,12 +92,11 @@ static int als_write_packet(struct AVFormatContext *s, AVPacket *pkt)
         ctx->side_data = av_malloc(extradata_size);
         if (!ctx->side_data)
             return AVERROR(ENOMEM);
-        memcpy(ctx->side_data, side_data, extradata_size);   
+        memcpy(ctx->side_data, side_data, extradata_size);
         ctx->extradata_size=extradata_size;
-    }          
+    }
     if(pkt->size)
         avio_write(s->pb, pkt->data, pkt->size);
-    //avio_flush(s->pb);
     return 0;
 }
 

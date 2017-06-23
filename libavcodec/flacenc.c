@@ -150,7 +150,6 @@ static void write_streaminfo(FlacEncodeContext *s, uint8_t *header)
     /* write 36-bit sample count in 2 put_bits() calls */
     put_bits(&pb, 24, (s->sample_count & 0xFFFFFF000LL) >> 12);
     put_bits(&pb, 12,  s->sample_count & 0x000000FFFLL);
-    s->sample_count++;
     flush_put_bits(&pb);
     memcpy(&header[18], s->md5sum, 16);
 }
@@ -1072,7 +1071,6 @@ static int encode_frame(FlacEncodeContext *s)
     if (count > INT_MAX)
         return AVERROR_BUG;
     return count;
-
 }
 
 
@@ -1429,7 +1427,6 @@ FF_ENABLE_DEPRECATION_WARNINGS
 
     s->frame_count++;
     s->sample_count += frame->nb_samples;
-
     if ((ret = update_md5_sum(s, frame->data[0])) < 0) {
         av_log(avctx, AV_LOG_ERROR, "Error updating MD5 checksum\n");
         return ret;
