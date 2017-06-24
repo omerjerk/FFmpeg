@@ -2800,12 +2800,13 @@ static int write_specific_config(AVCodecContext *avctx)
     if (sconf->ra_flag == RA_FLAG_HEADER && sconf->ra_distance > 0)     // ra_unit_size
         header_size += (sconf->samples / sconf->frame_length + 1) << 2;
 
-    if (!avctx->extradata)
-        avctx->extradata = av_mallocz(header_size + AV_INPUT_BUFFER_PADDING_SIZE);
+    if (avctx->extradata)
+        av_freep(&avctx->extradata);
+
+    avctx->extradata = av_mallocz(header_size + AV_INPUT_BUFFER_PADDING_SIZE);
     if (!avctx->extradata)
         return AVERROR(ENOMEM);
 
-    memset(avctx->extradata, 0, header_size + AV_INPUT_BUFFER_PADDING_SIZE);
     init_put_bits(&ctx->pb, avctx->extradata, header_size + FF_INPUT_BUFFER_PADDING_SIZE);
 
     // AudioSpecificConfig, reference to ISO/IEC 14496-3 section 1.6.2.1 & 1.6.3
@@ -2917,6 +2918,7 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
                 ctx->crc = av_crc(ctx->crc_table, ctx->crc, (uint8_t *)(&v), 3);
             }
         }
+ 
     }
 
     // preprocessing
