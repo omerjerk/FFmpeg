@@ -2273,7 +2273,7 @@ static void find_best_autocorr(ALSEncContext *ctx, ALSBlock *block,
     }
 
     block->ltp_info[block->js_block].lag = i_max;
-    av_freep(autoc);
+    av_freep(&autoc);
 }
 
 
@@ -2311,8 +2311,14 @@ static void get_ltp_coeffs_cholesky(ALSEncContext *ctx, ALSBlock *block)
     avpriv_init_lls(&m, 5);
 
     corr_ptr_lag = corr_ptr - 2 - taumax;
-    for (smp = 0; smp < len - 2; smp++)
-        m.update_lls(&m, corr_ptr_lag++);
+    for (smp = 0; smp < len - 2; smp++) {
+        for (int i = 0; i <= m.indep_count; i++) {
+            for (int j = i; j <= m.indep_count; j++) {
+                m.covariance[i][j] += corr_ptr_lag[i] * corr_ptr_lag[j];
+            }
+        }
+        corr_ptr_lag++;
+    }
 
     corr_ptr_lag = corr_ptr - 2 - taumax;
     memset(c, 0, 5 * sizeof(*c));
@@ -2488,7 +2494,7 @@ static void find_block_adapt_order(ALSEncContext *ctx, ALSBlock *block,
             break;
     }
     block->opt_order = best;
-    av_freep(count);
+    av_freep(&count);
 }
 
 
@@ -2593,7 +2599,7 @@ static int find_block_params(ALSEncContext *ctx, ALSBlock *block)
             quantize_parcor_coeffs(ctx, block, parcor, block->opt_order);
 
             calc_short_term_prediction(ctx, block, block->opt_order);
-            av_freep(parcor);
+            av_freep(&parcor);
         }
         block->cur_ptr = block->res_ptr;
     }
@@ -2800,13 +2806,12 @@ static int write_specific_config(AVCodecContext *avctx)
     if (sconf->ra_flag == RA_FLAG_HEADER && sconf->ra_distance > 0)     // ra_unit_size
         header_size += (sconf->samples / sconf->frame_length + 1) << 2;
 
-    if (avctx->extradata)
-        av_freep(&avctx->extradata);
-
-    avctx->extradata = av_mallocz(header_size + AV_INPUT_BUFFER_PADDING_SIZE);
+    if (!avctx->extradata)
+        avctx->extradata = av_mallocz(header_size + AV_INPUT_BUFFER_PADDING_SIZE);
     if (!avctx->extradata)
         return AVERROR(ENOMEM);
 
+    memset(avctx->extradata, 0, header_size + AV_INPUT_BUFFER_PADDING_SIZE);
     init_put_bits(&ctx->pb, avctx->extradata, header_size + FF_INPUT_BUFFER_PADDING_SIZE);
 
     // AudioSpecificConfig, reference to ISO/IEC 14496-3 section 1.6.2.1 & 1.6.3
@@ -2922,6 +2927,7 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
     }
 
     // preprocessing
+    ctx->avctx->frame_size = frame->nb_samples;
     deinterleave_raw_samples(ctx, data);
 
     // find optimal encoding parameters
