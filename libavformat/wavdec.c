@@ -582,7 +582,6 @@ break_loop:
 
     set_spdif(s, wav);
 
-
     return 0;
 }
 
@@ -880,7 +879,6 @@ static int w64_read_header(AVFormatContext *s)
     avio_seek(pb, data_ofs, SEEK_SET);
 
     set_spdif(s, wav);
-
 
     return 0;
 }
