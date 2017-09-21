@@ -126,28 +126,6 @@ static const int16_t mcc_weightings[] = {
 };
 
 
-/** Tail codes used in arithmetic coding using block Gilbert-Moore codes.
- */
-static const uint8_t tail_code[16][6] = {
-    { 74, 44, 25, 13,  7, 3},
-    { 68, 42, 24, 13,  7, 3},
-    { 58, 39, 23, 13,  7, 3},
-    {126, 70, 37, 19, 10, 5},
-    {132, 70, 37, 20, 10, 5},
-    {124, 70, 38, 20, 10, 5},
-    {120, 69, 37, 20, 11, 5},
-    {116, 67, 37, 20, 11, 5},
-    {108, 66, 36, 20, 10, 5},
-    {102, 62, 36, 20, 10, 5},
-    { 88, 58, 34, 19, 10, 5},
-    {162, 89, 49, 25, 13, 7},
-    {156, 87, 49, 26, 14, 7},
-    {150, 86, 47, 26, 14, 7},
-    {142, 84, 47, 26, 14, 7},
-    {131, 79, 46, 26, 14, 7}
-};
-
-
 enum RA_Flag {
     RA_FLAG_NONE,
     RA_FLAG_FRAMES,
@@ -838,7 +816,7 @@ static int read_var_block_data(ALSDecContext *ctx, ALSBlockData *bd)
         current_res = bd->raw_samples + start;
 
         for (sb = 0; sb < sub_blocks; sb++, start = 0) {
-            unsigned int cur_tail_code = tail_code[sx[sb]][delta[sb]];
+            unsigned int cur_tail_code = ff_bgmc_tail_code[sx[sb]][delta[sb]];
             unsigned int cur_k         = k[sb];
             unsigned int cur_s         = s[sb];
 
@@ -1773,7 +1751,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *got_frame_ptr,
     // For the first frame, if prediction is used, all samples used from the
     // previous frame are assumed to be zero.
     ra_frame = sconf->ra_distance && !(ctx->frame_id % sconf->ra_distance);
-
+    
     // the last frame to decode might have a different length
     if (sconf->samples != 0xFFFFFFFF)
         ctx->cur_frame_length = FFMIN(sconf->samples - ctx->frame_id * (uint64_t) sconf->frame_length,
