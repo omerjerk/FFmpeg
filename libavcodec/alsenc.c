@@ -39,13 +39,13 @@
 #define LPC_USE_DOUBLE
 #include "lpc.h"
 #include "mpeg4audio.h"
-#include "audioconvert.h"
 #include "bgmc.h"
 #include "window.h"
 #include "internal.h"
 #include "libavutil/crc.h"
 #include "libavutil/lls.h"
 #include "libavutil/samplefmt.h"
+#include "libswresample/audioconvert.h"
 
 
 /** Total size of fixed-size fields in ALSSpecificConfig */
