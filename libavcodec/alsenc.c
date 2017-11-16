@@ -1371,7 +1371,7 @@ static int write_block(ALSEncContext *ctx, ALSBlock *block)
  * Write the frame.
  * @return Overall bit count for the frame on success, -1 otherwise
  */
-static int write_frame(ALSEncContext *ctx, AVPacket *avpkt, int buf_size)
+static int write_frame(ALSEncContext *ctx, const AVPacket *avpkt, int buf_size)
 {
     AVCodecContext *avctx    = ctx->avctx;
     ALSSpecificConfig *sconf = &ctx->sconf;
@@ -2812,7 +2812,7 @@ static int write_specific_config(AVCodecContext *avctx)
         return AVERROR(ENOMEM);
 
     memset(avctx->extradata, 0, header_size + AV_INPUT_BUFFER_PADDING_SIZE);
-    init_put_bits(&ctx->pb, avctx->extradata, header_size + FF_INPUT_BUFFER_PADDING_SIZE);
+    init_put_bits(&ctx->pb, avctx->extradata, header_size + AV_INPUT_BUFFER_PADDING_SIZE);
 
     // AudioSpecificConfig, reference to ISO/IEC 14496-3 section 1.6.2.1 & 1.6.3
     memset(&m4ac, 0, sizeof(MPEG4AudioConfig));
@@ -2822,7 +2822,7 @@ static int write_specific_config(AVCodecContext *avctx)
     m4ac.chan_config    = 0;
     m4ac.sbr            = -1;
 
-    avctx->extradata_size = (header_size + FF_INPUT_BUFFER_PADDING_SIZE);
+    avctx->extradata_size = (header_size + AV_INPUT_BUFFER_PADDING_SIZE);
 
     config_offset = ff_mpeg4audio_write_config(&m4ac, avctx->extradata,
                                                avctx->extradata_size);
@@ -2885,8 +2885,8 @@ static int write_specific_config(AVCodecContext *avctx)
  * Encode a single frame.
  * @return Overall bit count for the frame
  */
-static int encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
-                        AVFrame *frame)
+static int encode_frame(AVCodecContext *avctx, const AVPacket *avpkt,
+                        const AVFrame *frame)
 {
     ALSEncContext *ctx       = avctx->priv_data;
     ALSSpecificConfig *sconf = &ctx->sconf;
@@ -3123,7 +3123,7 @@ static av_cold int get_specific_config(AVCodecContext *avctx)
         sconf->resolution = 1; break;
     case AV_SAMPLE_FMT_FLT:
         sconf->floating   = 1;
-        av_log_missing_feature(avctx, "floating-point samples\n", 0);
+        avpriv_report_missing_feature(avctx, "floating-point samples\n");
     case AV_SAMPLE_FMT_S32:
         if (avctx->bits_per_raw_sample <= 24)
             sconf->resolution = 2;
@@ -3535,7 +3535,7 @@ AVCodec ff_als_encoder = {
     .init           = als_encode_init,
     .encode2        = als_encode_frame,
     .close          = als_encode_end,
-    .capabilities = CODEC_CAP_SMALL_LAST_FRAME | CODEC_CAP_DELAY,
+    .capabilities   = AV_CODEC_CAP_DELAY,
     .sample_fmts = (const enum AVSampleFormat[]){ AV_SAMPLE_FMT_U8,  AV_SAMPLE_FMT_S16,
                                                 AV_SAMPLE_FMT_S32, AV_SAMPLE_FMT_NONE },
 };
