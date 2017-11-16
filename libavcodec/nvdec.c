@@ -54,6 +54,9 @@ static int map_avcodec_id(enum AVCodecID id)
     switch (id) {
     case AV_CODEC_ID_H264: return cudaVideoCodec_H264;
     case AV_CODEC_ID_HEVC: return cudaVideoCodec_HEVC;
+    case AV_CODEC_ID_VC1:  return cudaVideoCodec_VC1;
+    case AV_CODEC_ID_VP9:  return cudaVideoCodec_VP9;
+    case AV_CODEC_ID_WMV3:  return cudaVideoCodec_VC1;
     }
     return -1;
 }
@@ -291,8 +294,15 @@ int ff_nvdec_decode_init(AVCodecContext *avctx)
     params.ulNumOutputSurfaces = 1;
 
     ret = nvdec_decoder_create(&ctx->decoder_ref, frames_ctx->device_ref, &params, avctx);
-    if (ret < 0)
+    if (ret < 0) {
+        if (params.ulNumDecodeSurfaces > 32) {
+            av_log(avctx, AV_LOG_WARNING, "Using more than 32 (%d) decode surfaces might cause nvdec to fail.\n",
+                   (int)params.ulNumDecodeSurfaces);
+            av_log(avctx, AV_LOG_WARNING, "Try lowering the amount of threads. Using %d right now.\n",
+                   avctx->thread_count);
+        }
         return ret;
+    }
 
     pool = av_mallocz(sizeof(*pool));
     if (!pool) {
@@ -406,8 +416,10 @@ int ff_nvdec_start_frame(AVCodecContext *avctx, AVFrame *frame)
         return AVERROR(ENOMEM);
 
     cf->decoder_ref = av_buffer_ref(ctx->decoder_ref);
-    if (!cf->decoder_ref)
+    if (!cf->decoder_ref) {
+        ret = AVERROR(ENOMEM);
         goto fail;
+    }
 
     cf->idx_ref = av_buffer_pool_get(ctx->decoder_pool);
     if (!cf->idx_ref) {
