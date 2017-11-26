@@ -3535,7 +3535,7 @@ AVCodec ff_als_encoder = {
     .init           = als_encode_init,
     .encode2        = als_encode_frame,
     .close          = als_encode_end,
-    .capabilities   = AV_CODEC_CAP_DELAY,
+    .capabilities   = AV_CODEC_CAP_DELAY | AV_CODEC_CAP_EXPERIMENTAL,
     .sample_fmts = (const enum AVSampleFormat[]){ AV_SAMPLE_FMT_U8,  AV_SAMPLE_FMT_S16,
                                                 AV_SAMPLE_FMT_S32, AV_SAMPLE_FMT_NONE },
 };
