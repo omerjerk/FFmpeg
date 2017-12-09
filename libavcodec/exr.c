@@ -574,21 +574,25 @@ static int huf_decode(const uint64_t *hcode, const HufDec *hdecod,
 static int huf_uncompress(GetByteContext *gb,
                           uint16_t *dst, int dst_size)
 {
+    //TO DO : need to modify the piz_uncompress, to get size before this func
     int32_t src_size, im, iM;
     uint32_t nBits;
     uint64_t *freq;
     HufDec *hdec;
     int ret, i;
 
-    src_size = bytestream2_get_le32(gb);
+    //TEMP//src_size = bytestream2_get_le32(gb);
     im       = bytestream2_get_le32(gb);
     iM       = bytestream2_get_le32(gb);
     bytestream2_skip(gb, 4);
     nBits = bytestream2_get_le32(gb);
     if (im < 0 || im >= HUF_ENCSIZE ||
-        iM < 0 || iM >= HUF_ENCSIZE ||
-        src_size < 0)
+        iM < 0 || iM >= HUF_ENCSIZE){// ||
+        //TEMP//src_size < 0) {
+        printf("im : %d / iM : %d / HUF_ENCSIZE : %d\n", im, iM, HUF_ENCSIZE);
+        printf("Invalid start huffman\n");
         return AVERROR_INVALIDDATA;
+    }
 
     bytestream2_skip(gb, 4);
 
@@ -1025,6 +1029,165 @@ static int b44_uncompress(EXRContext *s, const uint8_t *src, int compressed_size
     return 0;
 }
 
+static int dw_uncompress(EXRContext *s, const uint8_t *src, int compressed_size,
+                         int uncompressed_size, EXRThreadData *td){
+    int ret = 0;
+    const int8_t *sr = src;
+    unsigned int header_size;
+    GetByteContext gb;
+    int64_t version;
+    int64_t unknown_uncompress_size, unknown_compress_size;
+    int64_t rle_compress_size, rle_uncompress_size, rle_raw_size;
+    int64_t ac_compress_size = 0, dc_compress_size;
+    int64_t total_ac_uncompress_count, total_dc_uncompress_count, ac_compression;
+    uint64_t block_compressed_size;
+    int16_t rule_size;
+
+    //uint16_t * ac_data;
+    //int8_t * dc_data;
+    unsigned long dest_len;
+
+    uint8_t *out_temp = td->tmp;
+
+    /* parse dw header */
+    header_size = 11 * 8;
+    if (compressed_size < header_size) {
+        av_log(s, AV_LOG_ERROR, "Not enough data for dw header");
+        return AVERROR_INVALIDDATA;
+    }
+
+    bytestream2_init(&gb, src, compressed_size);
+
+    version = bytestream2_get_le64(&gb);
+    if (version != 2) {
+        avpriv_request_sample(s, "Unknown version : %lld", version);
+        return AVERROR_PATCHWELCOME;
+    }
+
+    unknown_uncompress_size = bytestream2_get_le64(&gb);
+    unknown_compress_size = bytestream2_get_le64(&gb);
+    if (unknown_uncompress_size != 0 || unknown_compress_size != 0){
+        avpriv_request_sample(s, "Uncompress data in DWA block");
+        return AVERROR_PATCHWELCOME;
+    }
+
+    ac_compress_size = bytestream2_get_le64(&gb);
+    if ((ac_compress_size > compressed_size) || (ac_compress_size <= 0)) {
+        av_log(s, AV_LOG_ERROR, "Invalid ac_compress_size: %lld", ac_compress_size);
+        return AVERROR_INVALIDDATA;
+    }
+
+    dc_compress_size = bytestream2_get_le64(&gb);
+    if ((dc_compress_size > compressed_size) || (dc_compress_size <= 0)) {
+        av_log(s, AV_LOG_ERROR, "Invalid dc_compress_size: %lld", dc_compress_size);
+        return AVERROR_INVALIDDATA;
+    }
+
+    rle_compress_size = bytestream2_get_le64(&gb);
+    rle_uncompress_size = bytestream2_get_le64(&gb);
+    rle_raw_size = bytestream2_get_le64(&gb);
+    if (rle_compress_size != 0 || rle_uncompress_size != 0 || rle_raw_size != 0){
+        avpriv_request_sample(s, "RLE data in DWA block");
+        return AVERROR_PATCHWELCOME;
+    }
+
+    total_ac_uncompress_count = bytestream2_get_le64(&gb);
+    total_dc_uncompress_count = bytestream2_get_le64(&gb);
+    ac_compression = bytestream2_get_le64(&gb);
+
+    block_compressed_size =  ac_compress_size + dc_compress_size;
+
+    if (compressed_size < (header_size + block_compressed_size)) {
+        av_log(s, AV_LOG_ERROR, "Not enough data for dw block.");
+        return AVERROR_INVALIDDATA;
+    }
+
+    rule_size = bytestream2_get_le16(&gb);
+    if (rule_size < 2) {
+        av_log(s, AV_LOG_ERROR, "Invalid rule_size : %d", rule_size);
+        return AVERROR_INVALIDDATA;
+    }
+    header_size += rule_size;
+    if (compressed_size < (header_size + block_compressed_size)){
+        av_log(s, AV_LOG_ERROR, "Not enough data for dw block.");
+        return AVERROR_INVALIDDATA;
+    }
+
+    av_log(s, AV_LOG_DEBUG, "AC compress : %lld / Total AC count : %lld / ac compression : %lld\n",
+           ac_compress_size, total_ac_uncompress_count, ac_compression);
+    av_log(s, AV_LOG_DEBUG, "DC compress : %lld / Total DC count : %lld\n",
+           dc_compress_size, total_dc_uncompress_count);
+
+    bytestream2_skip(&gb, rule_size - 2);/* skip channels compression rules */
+    // TO DO : Detect compression rules for each channel (based on the channel name)
+
+    /* Uncompress AC/DC Coefficients */
+    if ((ac_compress_size > 0) && (total_ac_uncompress_count > 0)) {
+        av_log(s, AV_LOG_DEBUG, "uncompress ac coeff\n");
+
+        //ac_data = av_malloc(total_ac_uncompress_count);
+        //if (!ac_data) {
+        //    ret = AVERROR(ENOMEM);
+        //    goto fail;
+        //}
+
+        switch (ac_compression) {
+        case 0:/* STATIC_HUFFMAN */
+            ret = huf_uncompress(&gb, (uint16_t *)out_temp, total_ac_uncompress_count);
+            out_temp += total_ac_uncompress_count*2;
+            if (ret) {
+                if (ret == AVERROR_INVALIDDATA){
+                    av_log(s, AV_LOG_ERROR, "fail ac huffman uncompress : invalid data\n");
+                } else{
+                    av_log(s, AV_LOG_ERROR, "fail ac huffman uncompress : unkonwn error");
+                }
+                goto fail;
+            }
+            break;
+        case 1:/* DEFLATE */
+            avpriv_request_sample(s, "ac compression deflate");
+            ret = AVERROR_PATCHWELCOME;
+            goto fail;
+        default:
+            av_log(s, AV_LOG_ERROR, "Invalid ac compression");
+            ret = AVERROR_INVALIDDATA;
+            goto fail;
+        }
+
+        av_log(s, AV_LOG_DEBUG, "succes uncompress ac coeff\n");
+    }
+
+    if ((dc_compress_size > 0) && (total_dc_uncompress_count > 0)) { /*! unzip dc coeff */
+        av_log(s, AV_LOG_DEBUG, "uncompress dc coeff\n");
+        dest_len = total_dc_uncompress_count * 2;
+
+        // TO DO
+
+        if (uncompress(out_temp, &dest_len, sr, dc_compress_size) != Z_OK){
+            av_log(s, AV_LOG_ERROR, "Uncompress error");
+            ret = AVERROR_INVALIDDATA;
+            goto fail;
+        }
+        else if (dest_len != (total_dc_uncompress_count * 2)) {
+            av_log(s, AV_LOG_ERROR, "Invalid dc uncompress size : %lu ; expected : %lld", dest_len, total_dc_uncompress_count * 2);
+            ret = AVERROR_INVALIDDATA;
+            goto fail;
+        }
+        av_log(s, AV_LOG_DEBUG, "succes uncompress dc coeff\n");
+    }
+
+    //TO DO Uncompress AC Coeff here
+
+    //TO DO IDCT
+
+    //TO DO Uncompress channel who doesn't use DCT (like alpha) (RLE ?)
+
+    //TO DO "YUV" -> RGB conversion
+fail:
+    //TO DO Free buffer here
+    return ret;
+}
+
 static int decode_block(AVCodecContext *avctx, void *tdata,
                         int jobnr, int threadnr)
 {
@@ -1153,6 +1316,10 @@ static int decode_block(AVCodecContext *avctx, void *tdata,
         case EXR_B44:
         case EXR_B44A:
             ret = b44_uncompress(s, src, data_size, uncompressed_size, td);
+            break;
+        case EXR_DWA:
+        case EXR_DWB:
+            ret = dw_uncompress(s, src, data_size, uncompressed_size, td);
             break;
         }
         if (ret < 0) {
@@ -1715,7 +1882,11 @@ static int decode_frame(AVCodecContext *avctx, void *data,
     case EXR_PIZ:
     case EXR_B44:
     case EXR_B44A:
+    case EXR_DWA:
         s->scan_lines_per_block = 32;
+        break;
+    case EXR_DWB:
+        s->scan_lines_per_block = 256;
         break;
     default:
         avpriv_report_missing_feature(avctx, "Compression %d", s->compression);
