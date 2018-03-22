@@ -46,6 +46,7 @@
 #include "libavutil/lls.h"
 #include "libavutil/samplefmt.h"
 #include "libswresample/audioconvert.h"
+#include "libavutil/softfloat_ieee754.h"
 
 
 /** Total size of fixed-size fields in ALSSpecificConfig */
@@ -243,9 +244,19 @@ typedef struct {
     int frame_buffer_size;          ///< size of the frame_buffer in bytes
     LPCContext lpc;
 
+
+    /**
+    *fields for floating point
+    *
+    *SoftFloat_IEEE754 *acf;         ///< contains common multiplier for all channels
+    */
+
     int flushed;
     int64_t next_pts;
 } ALSEncContext;
+
+
+static void float2integer(AVCodecContext *avctx);
 
 
 /** compression level 0 global options **/
@@ -2938,6 +2949,9 @@ static int encode_frame(AVCodecContext *avctx, const AVPacket *avpkt,
     SET_OPTIONS(STAGE_BLOCK_SWITCHING);
     block_partitioning(ctx);
 
+    if(avctx->sample_fmt == AV_SAMPLE_FMT_FLT)
+        float2integer(avctx);
+
     SET_OPTIONS(STAGE_FINAL);
     if (!sconf->mc_coding || ctx->js_switch) {
         for (b = 0; b < ALS_MAX_BLOCKS; b++) {
@@ -2985,7 +2999,7 @@ static int encode_frame(AVCodecContext *avctx, const AVPacket *avpkt,
 static int als_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
                              const AVFrame *frame, int *got_packet_ptr)
 {
-
+    
     ALSEncContext *ctx       = avctx->priv_data;
     ALSSpecificConfig *sconf = &ctx->sconf;
     unsigned int encoded;
@@ -3013,7 +3027,7 @@ static int als_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
 
         return 0;
     }
-
+    //float2integer(avctx);
     // no need to take special care of always/never using ra-frames
     // just encode frame-by-frame
     if (sconf->ra_distance < 2) {
@@ -3094,12 +3108,59 @@ static void frame_partitioning(ALSEncContext *ctx)
 }
 
 
+
+
+static void float2integer(AVCodecContext *avctx)
+{
+    ALSEncContext *ctx       = avctx->priv_data;
+    SoftFloat_IEEE754 acf,buf, X;//at fitst take random acf
+    int Y;
+    // X = A * Y + Z
+    // A - acf
+
+
+    acf.sign = 0;
+    acf.exp = 127;
+    acf.mant = 4194304;//acf = 1.5 acf computing will be add some time later
+
+
+    //FILE *f = fopen("../trololo.txt", "a");
+    int i,j;
+
+    for(j = 0; j < avctx->channels; j++){
+        for(i = 0; i < avctx->frame_size; i++)
+        {
+            X = av_bits2sf_ieee754((uint32_t)ctx->raw_samples[j][i]);
+            buf = av_div_sf_ieee754(X, acf);
+            Y = av_trunc_sf_ieee754(buf);
+
+            buf = av_mul_sf_ieee754(acf, av_int2sf_ieee754(Y,0)); //Y*acf
+            buf = av_diff_sf_ieee754(X, buf);
+
+
+
+            //fprintf(f, "%ld\n", ctx->raw_samples[0][i]);
+        }
+    }
+
+    //fprintf(f, "####%d\n", avctx->frame_size);
+
+    //printf("###%d\n", ctx->frame_buffer_size);
+    //fclose(f);
+}
+
+
 /**
  * Determine the ALSSpecificConfig structure used to encode.
  * @return 0 on success, -1 otherwise
  */
 static av_cold int get_specific_config(AVCodecContext *avctx)
 {
+    //test_trunc();
+    //printf("\n\n\n#########\n");//############
+    //printf("# HELLO, FFMPEG\n");
+    //printf("#########\n\n\n");//############
+
     ALSEncContext *ctx       = avctx->priv_data;
     ALSSpecificConfig *sconf = &ctx->sconf;
 
@@ -3251,8 +3312,15 @@ static av_cold int als_encode_end(AVCodecContext *avctx)
 }
 
 
+
+
+
+
+
+
 static av_cold int als_encode_init(AVCodecContext *avctx)
 {
+    
     ALSEncContext *ctx       = avctx->priv_data;
     ALSSpecificConfig *sconf = &ctx->sconf;
     unsigned int channel_size, channel_offset;
@@ -3521,6 +3589,9 @@ static av_cold int als_encode_init(AVCodecContext *avctx)
     }
     if ((ret = ff_lpc_init(&ctx->lpc, avctx->frame_size, sconf->max_order, FF_LPC_TYPE_FIXED)) < 0)
         return ret;
+
+
+
 
     return 0;
 }
