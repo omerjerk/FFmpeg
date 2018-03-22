@@ -112,4 +112,103 @@ static inline int av_cmp_sf_ieee754(SoftFloat_IEEE754 a, SoftFloat_IEEE754 b) {
     return 1;
 }
 
+
+/** difference a with b
+ * (first stupid version)
+ *  #return normalized result
+ */
+static inline SoftFloat_IEEE754 av_diff_sf_ieee754(SoftFloat_IEEE754 a, SoftFloat_IEEE754 b) {
+    int64_t a_temp = 0, b_temp = 0;
+    a_temp = a.mant;
+    b_temp = b.mant;
+    int32_t sign;
+    int i;
+    a_temp = a_temp | 0x800000UL;// add 24th bit. float = sign * (2 ^ exp) * 1.mant
+    b_temp = b_temp | 0x800000UL;
+
+    if(a.exp > b.exp)
+        a_temp = a_temp << (a.exp - b.exp); 
+    else 
+        b_temp = b_temp << (b.exp - a.exp); 
+    
+    //printf("a = %ld\n", a_temp);
+    //printf("b = %ld\n", b_temp);
+    if(a.sign == 1)
+        a_temp *= -1;
+    if(b.sign == 1)
+        b_temp *= -1;
+
+    a_temp -= b_temp;
+
+    //printf("res = %ld\n", a_temp);
+
+    if(a_temp >= 0)
+        sign = 0;
+    else
+        sign = 1;
+
+    if(sign) a_temp *= -1;
+
+
+    i = 31;
+    while ((a_temp & (0x1 << i) == 0))
+        i--;
+
+    a_temp = a_temp & ~(0x1 << i);
+
+    //printf("i = %d\n", 0x1 << i);
+    //printf("res_1 = %ld\n", a_temp);
+
+    return av_normalize_sf_ieee754((SoftFloat_IEEE754) {sign, a.exp > b.exp ? a.exp : b.exp, 128});
+}
+
+/**truncation a 
+ * 
+ */
+static inline int av_trunc_sf_ieee754(SoftFloat_IEEE754 a) {
+    uint64_t result;
+    int i;
+    if(a.exp < 127)
+        result = 0;
+    else
+    {
+        result = 0x1;
+        for(i = 0; i < a.exp - 127; i++)
+        {
+            result = result << 1;
+            if(a.mant & 0x400000UL)
+                result += 0x1;
+            a.mant = a.mant << 1;
+        }
+    }
+
+    if(a.sign == 0)
+        return result;
+    else
+        return (-1) * result;
+}
+
+
+static inline void test_trunc()
+{
+    SoftFloat_IEEE754 a, b, c;
+    a.sign = 1; //-5894.78125
+    a.exp = 139;
+    a.mant = 3683904;
+
+    b.sign = 0;//24.875
+    b.exp = 131;
+    b.mant = 4653056;
+
+    c = av_diff_sf_ieee754(a, b);
+
+    //printf("%d\n",av_trunc_sf_ieee754(a));
+    
+    printf("%d\n%d\n%u\n",c.sign,c.exp, c.mant);
+
+
+}
+
+
 #endif /*AVUTIL_SOFTFLOAT_IEEE754_H*/
+
