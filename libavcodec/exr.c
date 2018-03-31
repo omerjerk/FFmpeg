@@ -282,6 +282,24 @@ static int zip_uncompress(EXRContext *s, const uint8_t *src, int compressed_size
     return 0;
 }
 
+static int zip_uncompress_new(EXRContext *s, const uint8_t *src, int compressed_size,
+                          int uncompressed_size, uint8_t *uncompressed)
+{
+    unsigned long dest_len = uncompressed_size;
+
+    uint8_t *tmp = av_malloc(dest_len);
+    if (uncompress(tmp, &dest_len, src, compressed_size) != Z_OK ||
+        dest_len != uncompressed_size)
+        return AVERROR_INVALIDDATA;
+
+    av_assert1(uncompressed_size % 2 == 0);
+
+    s->dsp.predictor(tmp, uncompressed_size);
+    s->dsp.reorder_pixels(uncompressed, tmp, uncompressed_size);
+
+    return 0;
+}
+
 static int rle_uncompress(EXRContext *ctx, const uint8_t *src, int compressed_size,
                           int uncompressed_size, EXRThreadData *td)
 {
@@ -325,6 +343,53 @@ static int rle_uncompress(EXRContext *ctx, const uint8_t *src, int compressed_si
 
     ctx->dsp.predictor(td->tmp, uncompressed_size);
     ctx->dsp.reorder_pixels(td->uncompressed_data, td->tmp, uncompressed_size);
+
+    return 0;
+}
+
+static int rle_uncompress_new(EXRContext *ctx, const uint8_t *src, int compressed_size,
+                          int uncompressed_size, uint8_t *uncompressed)
+{
+    uint8_t *d      = uncompressed;
+    const int8_t *s = src;
+    int ssize       = compressed_size;
+    int dsize       = uncompressed_size;
+    uint8_t *dend   = d + dsize;
+    int count;
+
+    while (ssize > 0) {
+        count = *s++;
+
+        if (count < 0) {
+            count = -count;
+
+            if ((dsize -= count) < 0 ||
+                (ssize -= count + 1) < 0)
+                return AVERROR_INVALIDDATA;
+
+            while (count--)
+                *d++ = *s++;
+        } else {
+            count++;
+
+            if ((dsize -= count) < 0 ||
+                (ssize -= 2) < 0)
+                return AVERROR_INVALIDDATA;
+
+            while (count--)
+                *d++ = *s;
+
+            s++;
+        }
+    }
+
+    if (dend != d)
+        return AVERROR_INVALIDDATA;
+
+    av_assert1(uncompressed_size % 2 == 0);
+
+    // ctx->dsp.predictor(td->tmp, uncompressed_size);
+    // ctx->dsp.reorder_pixels(td->uncompressed_data, td->tmp, uncompressed_size);
 
     return 0;
 }
@@ -1042,10 +1107,11 @@ static int dw_uncompress(EXRContext *s, const uint8_t *src, int compressed_size,
     int64_t total_ac_uncompress_count, total_dc_uncompress_count, ac_compression;
     uint64_t block_compressed_size;
     int16_t rule_size;
+    int8_t *uncompressed_rle_data;
 
     //uint16_t * ac_data;
     //int8_t * dc_data;
-    unsigned long dest_len;
+    uint32_t dest_len;
 
     uint8_t *out_temp = td->tmp;
 
@@ -1086,16 +1152,12 @@ static int dw_uncompress(EXRContext *s, const uint8_t *src, int compressed_size,
     rle_compress_size = bytestream2_get_le64(&gb);
     rle_uncompress_size = bytestream2_get_le64(&gb);
     rle_raw_size = bytestream2_get_le64(&gb);
-    if (rle_compress_size != 0 || rle_uncompress_size != 0 || rle_raw_size != 0){
-        avpriv_request_sample(s, "RLE data in DWA block");
-        return AVERROR_PATCHWELCOME;
-    }
 
     total_ac_uncompress_count = bytestream2_get_le64(&gb);
     total_dc_uncompress_count = bytestream2_get_le64(&gb);
     ac_compression = bytestream2_get_le64(&gb);
 
-    block_compressed_size =  ac_compress_size + dc_compress_size;
+    block_compressed_size =  ac_compress_size + dc_compress_size + unknown_compress_size + rle_compress_size;
 
     if (compressed_size < (header_size + block_compressed_size)) {
         av_log(s, AV_LOG_ERROR, "Not enough data for dw block.");
@@ -1138,16 +1200,25 @@ static int dw_uncompress(EXRContext *s, const uint8_t *src, int compressed_size,
             if (ret) {
                 if (ret == AVERROR_INVALIDDATA){
                     av_log(s, AV_LOG_ERROR, "fail ac huffman uncompress : invalid data\n");
-                } else{
+                } else {
                     av_log(s, AV_LOG_ERROR, "fail ac huffman uncompress : unkonwn error");
                 }
                 goto fail;
             }
             break;
         case 1:/* DEFLATE */
-            avpriv_request_sample(s, "ac compression deflate");
-            ret = AVERROR_PATCHWELCOME;
-            goto fail;
+            dest_len = total_ac_uncompress_count * 2;
+            if (uncompress(out_temp, &dest_len, gb.buffer, ac_compress_size) != Z_OK) {
+                av_log(s, AV_LOG_ERROR, "Error deflating AC coefficients");
+                ret = AVERROR_INVALIDDATA;
+                goto fail;
+            } else if (dest_len != total_ac_uncompress_count * 2) {
+                av_log(s, AV_LOG_ERROR, "Invalid dc uncompress size : %lu ; expected : %lld", dest_len, total_dc_uncompress_count * 2);
+                ret = AVERROR_INVALIDDATA;
+                goto fail;
+            }
+            out_temp += dest_len;
+            break;
         default:
             av_log(s, AV_LOG_ERROR, "Invalid ac compression");
             ret = AVERROR_INVALIDDATA;
@@ -1160,10 +1231,7 @@ static int dw_uncompress(EXRContext *s, const uint8_t *src, int compressed_size,
     if ((dc_compress_size > 0) && (total_dc_uncompress_count > 0)) { /*! unzip dc coeff */
         av_log(s, AV_LOG_DEBUG, "uncompress dc coeff\n");
         dest_len = total_dc_uncompress_count * 2;
-
-        // TO DO
-
-        if (uncompress(out_temp, &dest_len, sr, dc_compress_size) != Z_OK){
+        if (zip_uncompress_new(s, gb.buffer, dc_compress_size, dest_len, out_temp)) {
             av_log(s, AV_LOG_ERROR, "Uncompress error");
             ret = AVERROR_INVALIDDATA;
             goto fail;
@@ -1173,7 +1241,33 @@ static int dw_uncompress(EXRContext *s, const uint8_t *src, int compressed_size,
             ret = AVERROR_INVALIDDATA;
             goto fail;
         }
+        out_temp += dest_len;
         av_log(s, AV_LOG_DEBUG, "succes uncompress dc coeff\n");
+    }
+
+    if (rle_raw_size > 0) {
+
+        dest_len = rle_uncompress_size;
+        uncompressed_rle_data = av_malloc(dest_len);
+        if (uncompress(uncompressed_rle_data, &dest_len, gb.buffer, rle_compress_size) != Z_OK) {
+            av_log(s, AV_LOG_ERROR, "RLE data deflate error");
+            ret = AVERROR_INVALIDDATA;
+            goto fail;
+        }
+
+        if (dest_len != rle_uncompress_size) {
+            av_log(s, AV_LOG_ERROR, "Invalid RLE uncompress size");
+            ret = AVERROR_INVALIDDATA;
+            goto fail;
+        }
+
+        if (rle_uncompress_new(s, uncompressed_rle_data, dest_len, rle_raw_size, out_temp)) {
+            av_log(s, AV_LOG_ERROR, "Invalid RLE raw size");
+            ret = AVERROR_INVALIDDATA;
+            goto fail;
+        }
+
+        out_temp += rle_raw_size;
     }
 
     //TO DO Uncompress AC Coeff here
@@ -1889,7 +1983,7 @@ static int decode_frame(AVCodecContext *avctx, void *data,
         s->scan_lines_per_block = 256;
         break;
     default:
-        avpriv_report_missing_feature(avctx, "Compression %d", s->compression);
+        avpriv_report_missing_feature(avctx, "Compression omerjerk %d", s->compression);
         return AVERROR_PATCHWELCOME;
     }
 
