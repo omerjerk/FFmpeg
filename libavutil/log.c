@@ -39,11 +39,9 @@
 #include "common.h"
 #include "internal.h"
 #include "log.h"
+#include "thread.h"
 
-#if HAVE_PTHREADS
-#include <pthread.h>
-static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-#endif
+static AVMutex mutex = AV_MUTEX_INITIALIZER;
 
 #define LINE_SZ 1024
 
@@ -268,10 +266,10 @@ static void format_line(void *avcl, int level, const char *fmt, va_list vl,
         av_bprintf(part+1, "[%s @ %p] ",
                  avc->item_name(avcl), avcl);
         if(type) type[1] = get_category(avcl);
-
-        if (flags & AV_LOG_PRINT_LEVEL)
-            av_bprintf(part+2, "[%s] ", get_level_str(level));
     }
+
+    if (*print_prefix && (level > AV_LOG_QUIET) && (flags & AV_LOG_PRINT_LEVEL))
+        av_bprintf(part+2, "[%s] ", get_level_str(level));
 
     av_vbprintf(part+3, fmt, vl);
 
@@ -317,9 +315,7 @@ void av_log_default_callback(void* ptr, int level, const char* fmt, va_list vl)
 
     if (level > av_log_level)
         return;
-#if HAVE_PTHREADS
-    pthread_mutex_lock(&mutex);
-#endif
+    ff_mutex_lock(&mutex);
 
     format_line(ptr, level, fmt, vl, part, &print_prefix, type);
     snprintf(line, sizeof(line), "%s%s%s%s", part[0].str, part[1].str, part[2].str, part[3].str);
@@ -356,9 +352,7 @@ void av_log_default_callback(void* ptr, int level, const char* fmt, va_list vl)
 #endif
 end:
     av_bprint_finalize(part+3, NULL);
-#if HAVE_PTHREADS
-    pthread_mutex_unlock(&mutex);
-#endif
+    ff_mutex_unlock(&mutex);
 }
 
 static void (*av_log_callback)(void*, int, const char*, va_list) =

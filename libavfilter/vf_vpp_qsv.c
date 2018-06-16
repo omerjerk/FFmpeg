@@ -27,6 +27,7 @@
 #include "libavutil/eval.h"
 #include "libavutil/avassert.h"
 #include "libavutil/pixdesc.h"
+#include "libavutil/mathematics.h"
 
 #include "formats.h"
 #include "internal.h"
@@ -249,6 +250,7 @@ static int config_output(AVFilterLink *outlink)
     QSVVPPParam     param = { NULL };
     QSVVPPCrop      crop  = { 0 };
     mfxExtBuffer    *ext_buf[ENH_FILTERS_COUNT];
+    AVFilterLink    *inlink = ctx->inputs[0];
 
     outlink->w          = vpp->out_width;
     outlink->h          = vpp->out_height;
@@ -320,18 +322,40 @@ static int config_output(AVFilterLink *outlink)
         param.ext_buf[param.num_ext_buf++] = (mfxExtBuffer*)&vpp->procamp_conf;
     }
 
-    return ff_qsvvpp_create(ctx, &vpp->qsv, &param);
+    if (vpp->use_frc || vpp->use_crop || vpp->deinterlace || vpp->denoise ||
+        vpp->detail || vpp->procamp || inlink->w != outlink->w || inlink->h != outlink->h)
+        return ff_qsvvpp_create(ctx, &vpp->qsv, &param);
+    else {
+        av_log(ctx, AV_LOG_VERBOSE, "qsv vpp pass through mode.\n");
+        if (inlink->hw_frames_ctx)
+            outlink->hw_frames_ctx = av_buffer_ref(inlink->hw_frames_ctx);
+    }
+
+    return 0;
 }
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *picref)
 {
-    VPPContext *vpp = inlink->dst->priv;
+    int              ret = 0;
+    AVFilterContext  *ctx = inlink->dst;
+    VPPContext       *vpp = inlink->dst->priv;
+    AVFilterLink     *outlink = ctx->outputs[0];
 
-    return ff_qsvvpp_filter_frame(vpp->qsv, inlink, picref);
+    if (vpp->qsv) {
+        ret = ff_qsvvpp_filter_frame(vpp->qsv, inlink, picref);
+        av_frame_free(&picref);
+    } else {
+        if (picref->pts != AV_NOPTS_VALUE)
+            picref->pts = av_rescale_q(picref->pts, inlink->time_base, outlink->time_base);
+        ret = ff_filter_frame(outlink, picref);
+    }
+
+    return ret;
 }
 
 static int query_formats(AVFilterContext *ctx)
 {
+    int ret;
     AVFilterFormats *in_fmts, *out_fmts;
     static const enum AVPixelFormat in_pix_fmts[] = {
         AV_PIX_FMT_YUV420P,
@@ -349,8 +373,12 @@ static int query_formats(AVFilterContext *ctx)
 
     in_fmts  = ff_make_format_list(in_pix_fmts);
     out_fmts = ff_make_format_list(out_pix_fmts);
-    ff_formats_ref(in_fmts, &ctx->inputs[0]->out_formats);
-    ff_formats_ref(out_fmts, &ctx->outputs[0]->in_formats);
+    ret = ff_formats_ref(in_fmts, &ctx->inputs[0]->out_formats);
+    if (ret < 0)
+        return ret;
+    ret = ff_formats_ref(out_fmts, &ctx->outputs[0]->in_formats);
+    if (ret < 0)
+        return ret;
 
     return 0;
 }

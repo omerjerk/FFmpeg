@@ -40,15 +40,12 @@ typedef struct VTContext {
     struct AVVideotoolboxContext *vt_ctx;
 
     // Current H264 parameters (used to trigger decoder restart on SPS changes).
-    uint8_t                     *sps;
-    uint32_t                    sps_len;
-    unsigned int                sps_capa;
+    uint8_t                     sps[3];
     bool                        reconfig_needed;
 } VTContext;
 
 int ff_videotoolbox_alloc_frame(AVCodecContext *avctx, AVFrame *frame);
 int ff_videotoolbox_uninit(AVCodecContext *avctx);
-int ff_videotoolbox_buffer_create(VTContext *vtctx, AVFrame *frame);
 int ff_videotoolbox_h264_start_frame(AVCodecContext *avctx,
                                      const uint8_t *buffer,
                                      uint32_t size);

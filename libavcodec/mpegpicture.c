@@ -148,10 +148,12 @@ static int alloc_frame_buffer(AVCodecContext *avctx,  Picture *pic,
         }
     }
 
-    if (linesize && (linesize   != pic->f->linesize[0] ||
-                     uvlinesize != pic->f->linesize[1])) {
+    if ((linesize   &&   linesize != pic->f->linesize[0]) ||
+        (uvlinesize && uvlinesize != pic->f->linesize[1])) {
         av_log(avctx, AV_LOG_ERROR,
-               "get_buffer() failed (stride changed)\n");
+               "get_buffer() failed (stride changed: linesize=%d/%d uvlinesize=%d/%d)\n",
+               linesize,   pic->f->linesize[0],
+               uvlinesize, pic->f->linesize[1]);
         ff_mpeg_unref_picture(avctx, pic);
         return -1;
     }
@@ -375,8 +377,10 @@ int ff_mpeg_ref_picture(AVCodecContext *avctx, Picture *dst, Picture *src)
 
     if (src->hwaccel_picture_private) {
         dst->hwaccel_priv_buf = av_buffer_ref(src->hwaccel_priv_buf);
-        if (!dst->hwaccel_priv_buf)
+        if (!dst->hwaccel_priv_buf) {
+            ret = AVERROR(ENOMEM);
             goto fail;
+        }
         dst->hwaccel_picture_private = dst->hwaccel_priv_buf->data;
     }
 

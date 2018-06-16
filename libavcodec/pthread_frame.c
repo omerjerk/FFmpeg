@@ -728,10 +728,6 @@ int ff_frame_thread_init(AVCodecContext *avctx)
     FrameThreadContext *fctx;
     int i, err = 0;
 
-#if HAVE_W32THREADS
-    w32thread_init();
-#endif
-
     if (!thread_count) {
         int nb_cpus = av_cpu_count();
 #if FF_API_DEBUG_MV
@@ -889,8 +885,6 @@ static int thread_get_buffer_internal(AVCodecContext *avctx, ThreadFrame *f, int
     int err;
 
     f->owner[0] = f->owner[1] = avctx;
-
-    ff_init_buffer_info(avctx, f->f);
 
     if (!(avctx->active_thread_type & FF_THREAD_FRAME))
         return ff_get_buffer(avctx, f->f, flags);
