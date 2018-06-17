@@ -69,6 +69,15 @@ int ff_mpeg4audio_get_config_gb(MPEG4AudioConfig *c, GetBitContext *gb,
 int avpriv_mpeg4audio_get_config(MPEG4AudioConfig *c, const uint8_t *buf,
                                  int bit_size, int sync_extension);
 
+/**
+ * Write MPEG-4 AudioSpecificConfig to save audio configuration into AVCodecContext->extradata.
+ * @param[in] c        MPEG4AudioConfig to read from.
+ * @param[in] buf      Extradata from container.
+ * @param[in] buf_size Extradata size.
+ * @return On error -1 is returned, on success AudioSpecificConfig bit index in extradata.
+ */
+int ff_mpeg4audio_write_config(MPEG4AudioConfig *c, uint8_t *buf, int buf_size);
+
 enum AudioObjectType {
     AOT_NULL,
                                // Support?                Name

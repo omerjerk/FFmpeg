@@ -380,6 +380,7 @@ extern AVCodec ff_ac3_fixed_decoder;
 extern AVCodec ff_alac_encoder;
 extern AVCodec ff_alac_decoder;
 extern AVCodec ff_als_decoder;
+extern AVCodec ff_als_encoder;
 extern AVCodec ff_amrnb_decoder;
 extern AVCodec ff_amrwb_decoder;
 extern AVCodec ff_ape_decoder;

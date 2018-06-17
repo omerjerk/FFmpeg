@@ -144,6 +144,7 @@ OBJS-$(CONFIG_VP3DSP)                  += vp3dsp.o
 OBJS-$(CONFIG_VP56DSP)                 += vp56dsp.o
 OBJS-$(CONFIG_VP8DSP)                  += vp8dsp.o
 OBJS-$(CONFIG_V4L2_M2M)                += v4l2_m2m.o v4l2_context.o v4l2_buffers.o v4l2_fmt.o
+OBJS-$(CONFIG_WINDOW)                  += window.o
 OBJS-$(CONFIG_WMA_FREQS)               += wma_freqs.o
 OBJS-$(CONFIG_WMV2DSP)                 += wmv2dsp.o
 
@@ -176,6 +177,7 @@ OBJS-$(CONFIG_ALAC_ENCODER)            += alacenc.o alac_data.o
 OBJS-$(CONFIG_ALIAS_PIX_DECODER)       += aliaspixdec.o
 OBJS-$(CONFIG_ALIAS_PIX_ENCODER)       += aliaspixenc.o
 OBJS-$(CONFIG_ALS_DECODER)             += alsdec.o bgmc.o mlz.o mpeg4audio.o
+OBJS-$(CONFIG_ALS_ENCODER)             += alsenc.o als_data.o als.o window.o
 OBJS-$(CONFIG_AMRNB_DECODER)           += amrnbdec.o celp_filters.o   \
                                           celp_math.o acelp_filters.o \
                                           acelp_vectors.o             \
@@ -896,6 +898,7 @@ OBJS-$(CONFIG_VP8_QSV_HWACCEL)            += qsvdec_other.o
 OBJS-$(CONFIG_ISO_MEDIA)               += mpeg4audio.o mpegaudiodata.o
 
 OBJS-$(CONFIG_ADTS_MUXER)              += mpeg4audio.o
+OBJS-$(CONFIG_ALS_MUXER)               += mpeg4audio.o
 OBJS-$(CONFIG_CAF_DEMUXER)             += ac3tab.o
 OBJS-$(CONFIG_CODEC2_DEMUXER)          += codec2utils.o
 OBJS-$(CONFIG_CODEC2_MUXER)            += codec2utils.o
